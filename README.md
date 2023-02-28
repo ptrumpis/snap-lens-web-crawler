@@ -9,6 +9,11 @@ const crawler = new LensWebCrawler();
 
 // examples
 const singeLens = await crawler.getLensByHash('32_CHAR_UUID');
-const creatorLensArr = await searchByCreatorSlug('CREATOR_SLUG');
+const creatorLenses = await crawler.searchByCreatorSlug('CREATOR_SLUG');
 const searchResults = await crawler.searchLenses('SEARCH TERM');
 ```
+
+## Info
+The return values are Snap Camera compatible object(s)
+
+© [Patrick Trumpis](https://github.com/ptrumpis)
