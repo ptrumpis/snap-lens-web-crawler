@@ -17,7 +17,7 @@ const creatorLenses = await crawler.searchByCreatorSlug('CREATOR_SLUG');
 const searchResults = await crawler.searchLenses('SEARCH TERM');
 ```
 
-## ℹ️  Info
+## ℹ️ Info
 The return values are Snap Camera compatible object(s).
 
 This crawler is a dependency of [Snap Camera Server](https://github.com/ptrumpis/snap-camera-server)
