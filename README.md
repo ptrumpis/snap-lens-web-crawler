@@ -1,9 +1,13 @@
-# Snap Lens Web Crawler
-Crawl and download Snap Lenses from *lens.snapchat.com* with ease
+# 👻 Snap Lens Web Crawler
+Crawl and download Snap Lenses from *lens.snapchat.com* with ease.
 
-## Usage
+## ⚠️ Requirements
+- cheerio
+- node-fetch
+
+## 🚀 Usage
 ```javascript
-import LensWebCrawler from "crawler.js";
+import LensWebCrawler from "./crawler.js";
 
 const crawler = new LensWebCrawler();
 
@@ -13,7 +17,20 @@ const creatorLenses = await crawler.searchByCreatorSlug('CREATOR_SLUG');
 const searchResults = await crawler.searchLenses('SEARCH TERM');
 ```
 
-## Info
-The return values are Snap Camera compatible object(s)
+## ℹ️  Info
+The return values are Snap Camera compatible object(s).
 
-© [Patrick Trumpis](https://github.com/ptrumpis)
+This crawler is a dependency of [Snap Camera Server](https://github.com/ptrumpis/snap-camera-server)
+
+## ❤️ Support
+If you like my work and want to support me, feel free to invite me for a virtual coffee ☕
+
+- [☕ Ko-fi](https://ko-fi.com/ptrumpis)
+- [☕ Buy me a Coffee](https://www.buymeacoffee.com/ptrumpis)
+- [☕ Liberapay](https://liberapay.com/ptrumpis/)
+
+You can also become my GitHub Sponsor
+
+---
+
+© 2023 [Patrick Trumpis](https://github.com/ptrumpis)
