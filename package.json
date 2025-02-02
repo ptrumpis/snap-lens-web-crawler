@@ -2,13 +2,30 @@
   "name": "snap-lens-web-crawler",
   "version": "0.9.3",
   "description": "Crawl and download Snap Lenses from *lens.snapchat.com* with ease.",
-  "main": "index.js",
+  "keywords": [
+    "snapchat",
+    "snapcamera",
+    "snap",
+    "lens",
+    "crawler"
+  ],
+  "main": "src/crawler.js",
+  "exports": {
+    ".": "./src/crawler.js"
+  },
   "type": "module",
   "scripts": {
+    "start": "node src/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
+  "author": "Patrick Trumpis <ptrumpis@pm.me>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ptrumpis/snap-lens-web-crawler.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ptrumpis/snap-lens-web-crawler/issues"
+  },
   "license": "GPL-3.0",
   "dependencies": {
     "cheerio": "^1.0.0",
