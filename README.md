@@ -13,8 +13,18 @@ JavaScript library to crawl and download Snap Lenses from *lens.snapchat.com* wi
 - node-fetch
 
 ## 🚀 Usage
+
+### Command Line test usage
+Uncomment code examples in `src/index.js` to get started.
+
+```
+npm start
+```
+
+### Example usage in JavaScript project
+
 ```javascript
-import LensWebCrawler from "./crawler.js";
+import LensWebCrawler from "./src/crawler.js";
 
 const crawler = new LensWebCrawler();
 
