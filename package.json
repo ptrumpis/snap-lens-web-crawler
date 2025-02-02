@@ -1,0 +1,17 @@
+{
+  "name": "snap-lens-web-crawler",
+  "version": "0.9.3",
+  "description": "Crawl and download Snap Lenses from *lens.snapchat.com* with ease.",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "GPL-3.0",
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "node-fetch": "^3.3.2"
+  }
+}
