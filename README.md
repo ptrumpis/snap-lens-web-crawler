@@ -19,8 +19,10 @@ import LensWebCrawler from "./crawler.js";
 const crawler = new LensWebCrawler();
 
 // examples
+const topLenses = await crawler.getTopLenses();
 const singeLens = await crawler.getLensByHash('32_CHAR_UUID');
-const creatorLenses = await crawler.searchByCreatorSlug('CREATOR_SLUG');
+const creatorLenses = await crawler.getLensesByCreator('CREATOR_SLUG');
+const userProfileLenses = await crawler.getUserProfileLenses('USERNAME');
 const searchResults = await crawler.searchLenses('SEARCH TERM');
 ```
 
@@ -43,4 +45,4 @@ You can also become my GitHub Sponsor
 
 ---
 
-© 2023-2024 [Patrick Trumpis](https://github.com/ptrumpis)
+© 2023-2025 [Patrick Trumpis](https://github.com/ptrumpis)
