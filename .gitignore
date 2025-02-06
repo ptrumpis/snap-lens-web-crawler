@@ -1,2 +1,14 @@
+# ignore npm generated files
 node_modules/
 package-lock.json
+
+# ignore everything in output except the .gitignore files
+/output/*
+!/output/bolts/
+!/output/info/
+
+/output/bolts/*
+/output/info/*
+
+!/output/bolts/.gitkeep
+!/output/info/.gitkeep
