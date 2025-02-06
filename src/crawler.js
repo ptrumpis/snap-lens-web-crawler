@@ -20,25 +20,12 @@ export default class SnapLensWebCrawler {
         };
     }
 
-    async getLensByHash(hash, rawOutput = false) {
+    async getLensByHash(hash) {
         try {
             const url = 'https://lens.snapchat.com/' + hash;
-
-            console.log('Crawling', url);
-
-            const body = await this._loadUrl(url);
-            const $ = cheerio.load(body);
-            const json = JSON.parse($(this.SCRIPT_SELECTOR).text());
-
-            // debugging
-            if (rawOutput) {
-                return json;
-            }
-
-            if (json && json?.props?.pageProps?.lensDisplayInfo) {
-                return this._lensInfoToLens(json.props.pageProps.lensDisplayInfo);
-            } else {
-                console.warn('JSON Property "props.pageProps.lensDisplayInfo" not found.', json);
+            const lens = await this._extractLensesFromUrl(url, "props.pageProps.lensDisplayInfo");
+            if (lens) {
+                return this._formatLensItem(lens);
             }
         } catch (e) {
             console.error(e);
@@ -46,28 +33,20 @@ export default class SnapLensWebCrawler {
         return null;
     }
 
-    async getLensesByCreator(obfuscatedSlug, offset = 0, limit = 100, rawOutput = false) {
+    async getLensesByCreator(obfuscatedSlug, offset = 0, limit = 100) {
         limit = Math.min(100, limit);
         let lenses = [];
         try {
             const url = 'https://lensstudio.snapchat.com/v1/creator/lenses/?limit=' + limit + '&offset=' + offset + '&order=1&slug=' + obfuscatedSlug;
-
-            console.log('Crawling', url);
-
             const jsonString = await this._loadUrl(url);
             if (jsonString) {
                 const json = JSON.parse(jsonString);
-
-                // debugging
-                if (rawOutput) {
-                    return json;
-                }
 
                 if (json && json.lensesList) {
                     for (let i = 0; i < json.lensesList.length; i++) {
                         const item = json.lensesList[i];
                         if (item.lensId && item.deeplinkUrl && item.name && item.creatorName) {
-                            lenses.push(this._lensItemToLens(item, obfuscatedSlug));
+                            lenses.push(this._formatLensItem(item, obfuscatedSlug));
                         }
                     }
                 } else {
@@ -80,54 +59,42 @@ export default class SnapLensWebCrawler {
         return lenses;
     }
 
-    async searchLenses(search, rawOutput = false) {
+    async searchLenses(search) {
         const slug = search.replace(/\W+/g, '-');
         let lenses = [];
         try {
             const url = 'https://www.snapchat.com/explore/' + slug;
+            const results = await this._extractLensesFromUrl(url, "props.pageProps.initialApolloState", "props.pageProps.encodedSearchResponse");
+            if (results) {
+                if (typeof results === 'object') {
+                    // original data structure
+                    for (const key in results) {
+                        if (key != 'ROOT_QUERY') {
+                            if (results[key].id && results[key].deeplinkUrl && results[key].lensName) {
+                                lenses.push(this._formatLensItem(results[key]));
+                            }
+                        }
+                    }
+                } else if (typeof results === 'string') {
+                    // new data structure introduced in summer 2024
+                    const searchResult = JSON.parse(results);
+                    let sectionResults = [];
+                    for (const index in searchResult.sections) {
+                        if (searchResult.sections[index].title === 'Lenses') {
+                            sectionResults = searchResult.sections[index].results;
+                            break;
+                        }
+                    }
 
-            console.log('Crawling', url);
-
-            const body = await this._loadUrl(url);
-            const $ = cheerio.load(body);
-            const json = JSON.parse($(this.SCRIPT_SELECTOR).text());
-
-            // debugging
-            if (rawOutput) {
-                return json;
-            }
-
-            if (json && json?.props?.pageProps?.initialApolloState) {
-                // original data structure
-                const results = json.props.pageProps.initialApolloState;
-                for (const key in results) {
-                    if (key != 'ROOT_QUERY') {
-                        if (results[key].id && results[key].deeplinkUrl && results[key].lensName) {
-                            lenses.push(this._lensItemToLens(results[key]));
+                    for (const index in sectionResults) {
+                        if (sectionResults[index]?.result?.lens) {
+                            let lens = sectionResults[index].result.lens;
+                            if (lens.lensId && lens.deeplinkUrl && lens.name) {
+                                lenses.push(this._formatLensItem(lens));
+                            }
                         }
                     }
                 }
-            } else if (json && json?.props?.pageProps?.encodedSearchResponse) {
-                // new data structure introduced in summer 2024
-                const searchResult = JSON.parse(json.props.pageProps.encodedSearchResponse);
-                let results = [];
-                for (const index in searchResult.sections) {
-                    if (searchResult.sections[index].title === 'Lenses') {
-                        results = searchResult.sections[index].results;
-                        break;
-                    }
-                }
-
-                for (const index in results) {
-                    if (results[index]?.result?.lens) {
-                        let lens = results[index].result.lens;
-                        if (lens.lensId && lens.deeplinkUrl && lens.name) {
-                            lenses.push(this._lensItemToLens(lens));
-                        }
-                    }
-                }
-            } else {
-                console.warn('JSON Property "props.pageProps.encodedSearchResponse" not found.', json);
             }
         } catch (e) {
             console.error(e);
@@ -135,29 +102,15 @@ export default class SnapLensWebCrawler {
         return lenses;
     }
 
-    async getUserProfileLenses(userName, rawOutput = false) {
+    async getUserProfileLenses(userName) {
         let lenses = [];
         try {
             const url = 'https://www.snapchat.com/add/' + userName;
-
-            console.log('Crawling', url);
-
-            const body = await this._loadUrl(url);
-            const $ = cheerio.load(body);
-            const json = JSON.parse($(this.SCRIPT_SELECTOR).text());
-
-            // debugging
-            if (rawOutput) {
-                return json;
-            }
-
-            if (json && json?.props?.pageProps?.lenses) {
-                const results = json.props.pageProps.lenses;
+            const results = await this._extractLensesFromUrl(url, "props.pageProps.lenses");
+            if (results) {
                 for (const index in results) {
-                    lenses.push(this._lensInfoToLens(results[index], userName));
+                    lenses.push(this._formatLensItem(results[index], userName));
                 }
-            } else {
-                console.warn('JSON Property "props.pageProps.lenses" not found.', json);
             }
         } catch (e) {
             console.error(e);
@@ -165,7 +118,7 @@ export default class SnapLensWebCrawler {
         return lenses;
     }
 
-    async getTopLenses(category = 'default', maxLenses = 100, sleep = 9000, rawOutput = false) {
+    async getTopLenses(category = 'default', maxLenses = 100, sleep = 9000) {
         let lenses = [];
         try {
             if (!this.TOP_CATEGORIES[category]) {
@@ -177,7 +130,6 @@ export default class SnapLensWebCrawler {
 
             let hasMore = false;
             let cursorId = '';
-
             do {
                 let url = categoryBaseUrl;
                 if (hasMore && cursorId) {
@@ -185,37 +137,55 @@ export default class SnapLensWebCrawler {
                     await this._sleep(sleep);
                 }
 
-                console.log('Crawling', url);
-
-                const body = await this._loadUrl(url);
-                const $ = cheerio.load(body);
-                const json = JSON.parse($(this.SCRIPT_SELECTOR).text());
-
-                // debugging
-                if (rawOutput) {
-                    return json;
-                }
-
-                if (json && json?.props?.pageProps?.topLenses) {
-                    const results = json.props.pageProps.topLenses;
+                const pageProps = await this._extractLensesFromUrl(url, "props.pageProps");
+                if (pageProps?.topLenses) {
+                    const results = pageProps.topLenses;
                     for (const index in results) {
                         if (maxLenses && lenses.length >= maxLenses) {
                             break;
                         }
-                        lenses.push(this._lensInfoToLens(results[index]));
+                        lenses.push(this._formatLensItem(results[index]));
                     }
-                } else {
-                    console.warn('JSON Property "props.pageProps.topLenses" not found.', json);
-                    break;
                 }
 
-                hasMore = json?.props?.pageProps?.hasMore || false;
-                cursorId = json?.props?.pageProps?.nextCursorId || '';
+                hasMore = pageProps?.hasMore || false;
+                cursorId = pageProps?.nextCursorId || '';
             } while (hasMore && cursorId && !(maxLenses && lenses.length >= maxLenses));
         } catch (e) {
             console.error(e);
         }
         return lenses;
+    }
+
+    async _extractLensesFromUrl(url, ...jsonObjPath) {
+        try {
+            console.log('Crawling:', url);
+
+            const body = await this._loadUrl(url);
+            if (typeof body === 'string' && body) {
+                const $ = cheerio.load(body);
+                const jsonString = $(this.SCRIPT_SELECTOR).text();
+                if (typeof jsonString === 'string' && jsonString) {
+                    const jsonObj = JSON.parse(jsonString);
+                    if (jsonObj) {
+                        const lenses = this._getProperty(jsonObj, ...jsonObjPath);
+                        if (typeof lenses !== 'undefined') {
+                            return lenses;
+                        } else {
+                            console.warn('JSON property path not found', jsonObjPath, jsonObj);
+                        }
+                    } else {
+                        console.warn('Unable to parse JSON string', jsonString);
+                    }
+                } else {
+                    console.warn('Unable to read script tag', this.SCRIPT_SELECTOR);
+                }
+            }
+        } catch (e) {
+            console.error('Error extracting lenses from URL:', url, e);
+        }
+
+        return undefined;
     }
 
     async _loadUrl(url) {
@@ -227,45 +197,50 @@ export default class SnapLensWebCrawler {
         try {
             const response = await fetch(url, { signal: controller.signal, headers: this.headers });
             if (response.status !== 200) {
-                console.warn("Unexpected HTTP status", response.status);
+                console.warn("Unexpected HTTP status:", response.status, url);
             }
             return await response.text();
         } catch (e) {
-            console.error('Request failed:', e);
+            console.error('Request failed:', url, e);
         } finally {
             clearTimeout(timeout);
         }
 
-        return null;
+        return undefined;
     }
 
-    // creator and search lens formatting
-    _lensItemToLens(lensItem, obfuscatedSlug = '') {
-        const uuid = this._extractUuidFromDeeplink(lensItem.deeplinkUrl);
+    _formatLensItem(lensItem, options = {}) {
+        const { obfuscatedSlug = '', userName = '' } = options;
+
+        const deeplinkUrl = lensItem.deeplinkUrl || lensItem.unlockUrl || "";
+        const uuid = lensItem.scannableUuid || this._extractUuidFromDeeplink(deeplinkUrl);
+        const lensId = lensItem.lensId || lensItem.id || "";
+
         let result = {
-            unlockable_id: lensItem.id || lensItem.lensId,
+            //lens
+            unlockable_id: lensId,
             uuid: uuid,
             snapcode_url: lensItem.snapcodeUrl || this._snapcodeUrl(uuid),
 
             lens_name: lensItem.lensName || lensItem.name || "",
-            lens_creator_search_tags: [],
+            lens_creator_search_tags: lensItem.lensCreatorSearchTags || [],
             lens_tags: "",
             lens_status: "Live",
 
-            user_display_name: lensItem.creator?.title || lensItem.creatorName || "",
-            user_name: "",
-            user_profile_url: "",
+            user_display_name: lensItem.lensCreatorDisplayName || lensItem.creator?.title || lensItem.creatorName || "",
+            user_name: lensItem.lensCreatorUsername || userName || "",
+            user_profile_url: lensItem.userProfileUrl || this._profileUrl(lensItem.lensCreatorUsername || userName),
             user_id: lensItem.creatorUserId || "",
             user_profile_id: lensItem.creatorProfileId || "",
 
-            deeplink: lensItem.deeplinkUrl || "",
+            deeplink: deeplinkUrl,
             icon_url: lensItem.iconUrl || "",
-            thumbnail_media_url: lensItem.thumbnailUrl || lensItem.previewImageUrl || "",
-            thumbnail_media_poster_url: lensItem.thumbnailUrl || lensItem.previewImageUrl || "",
-            standard_media_url: lensItem.previewVideoUrl || "",
+            thumbnail_media_url: lensItem.thumbnailUrl || lensItem.previewImageUrl || lensItem.lensPreviewImageUrl || "",
+            thumbnail_media_poster_url: lensItem.thumbnailUrl || lensItem.previewImageUrl || lensItem.lensPreviewImageUrl || "",
+            standard_media_url: lensItem.previewVideoUrl || lensItem.lensPreviewVideoUrl || "",
             standard_media_poster_url: "",
             obfuscated_user_slug: obfuscatedSlug || "",
-            image_sequence: {}
+            image_sequence: {},
         };
 
         if (lensItem.thumbnailSequence) {
@@ -275,47 +250,21 @@ export default class SnapLensWebCrawler {
                 frame_interval_ms: lensItem.thumbnailSequence?.animationIntervalMs || 0
             }
         }
+
+        //unlock
+        if (lensId && lensItem.lensResource) {
+            Object.assign(result, {
+                lens_id: lensItem.lensId,
+                lens_url: lensItem.lensResource?.archiveLink || "",
+                signature: lensItem.lensResource?.signature || "",
+                sha256: lensItem.lensResource?.checkSum || "",
+                hint_id: "",
+                additional_hint_ids: {},
+                last_updated: lensItem.lensResource?.lastUpdated || ""
+            });
+        }
+
         return result;
-    }
-
-    // top lenses, user profile lenses and single lens formatting
-    _lensInfoToLens(lensInfo, userName = '') {
-        const uuid = lensInfo.scannableUuid || this._extractUuidFromDeeplink(lensInfo.unlockUrl);
-        return {
-            //lens
-            unlockable_id: lensInfo.lensId,
-            uuid: uuid,
-            snapcode_url: this._snapcodeUrl(uuid),
-
-            lens_name: lensInfo.lensName || "",
-            lens_creator_search_tags: lensInfo.lensCreatorSearchTags || [],
-            lens_tags: "",
-            lens_status: "Live",
-
-            user_display_name: lensInfo.lensCreatorDisplayName || "",
-            user_name: lensInfo.lensCreatorUsername || userName || "",
-            user_profile_url: lensInfo.userProfileUrl || this._profileUrl(lensInfo.lensCreatorUsername || userName),
-            user_id: "",
-            user_profile_id: "",
-
-            deeplink: lensInfo.unlockUrl || "",
-            icon_url: lensInfo.iconUrl || "",
-            thumbnail_media_url: lensInfo.lensPreviewImageUrl || "",
-            thumbnail_media_poster_url: lensInfo.lensPreviewImageUrl || "",
-            standard_media_url: lensInfo.lensPreviewVideoUrl || "",
-            standard_media_poster_url: "",
-            obfuscated_user_slug: "",
-            image_sequence: {},
-
-            //unlock
-            lens_id: lensInfo.lensId,
-            lens_url: lensInfo.lensResource?.archiveLink || "",
-            signature: lensInfo.lensResource?.signature || "",
-            sha256: lensInfo.lensResource?.checkSum || "",
-            hint_id: "",
-            additional_hint_ids: {},
-            last_updated: lensInfo.lensResource?.lastUpdated || "",
-        };
     }
 
     _profileUrl(username) {
@@ -341,6 +290,22 @@ export default class SnapLensWebCrawler {
             }
         }
         return '';
+    }
+
+    _getProperty(obj, ...selectors) {
+        if (!obj) return null;
+
+        for (const selector of selectors) {
+            const value = selector
+                .replace(/\[([^\[\]]*)\]/g, ".$1.")
+                .split(".")
+                .filter((t) => t !== "")
+                .reduce((prev, cur) => prev?.[cur], obj);
+
+            if (value !== undefined) return value;
+        }
+
+        return undefined;
     }
 
     _sleep(ms) {
