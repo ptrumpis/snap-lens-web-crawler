@@ -240,12 +240,20 @@ export default class SnapLensWebCrawler {
 
         try {
             const response = await fetch(url, { signal: controller.signal, headers: this.headers });
-            if (response.status !== 200) {
-                console.warn("Unexpected HTTP status:", response.status, url);
+            if (response.status >= 400 && response.status <= 500) {
+                console.error("Request failed:", url, "- HTTP Status", response.status);
+                return undefined;
+            } else if (response.status !== 200) {
+                console.warn("Unexpected HTTP status:", response.status, "-", url);
             }
+
             return await response.text();
         } catch (e) {
-            console.error('Request failed:', url, e);
+            if (e.name === 'AbortError') {
+                console.error('Request timeout:', url);
+            } else {
+                console.error('Request error:', url, e);
+            }
         } finally {
             clearTimeout(timeout);
         }
