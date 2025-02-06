@@ -20,6 +20,24 @@ export default class SnapLensWebCrawler {
         };
     }
 
+    mergeLensItems(item1, item2) {
+        function isEmpty(value) {
+            return !value ||
+                (Array.isArray(value) && value.length === 0) ||
+                (typeof value === "object" && value !== null && Object.keys(value).length === 0);
+        }
+
+        let merged = { ...item2, ...item1 };
+
+        for (let key in merged) {
+            if (isEmpty(item1[key])) {
+                merged[key] = item2[key];
+            }
+        }
+
+        return merged;
+    }
+
     async getLensByHash(hash) {
         try {
             const url = 'https://lens.snapchat.com/' + hash;
@@ -30,6 +48,32 @@ export default class SnapLensWebCrawler {
         } catch (e) {
             console.error(e);
         }
+        return null;
+    }
+
+    async getMoreLensesByHash(hash) {
+        let lenses = [];
+        try {
+            const url = 'https://lens.snapchat.com/' + hash;
+            const results = await this._extractLensesFromUrl(url, "props.pageProps.moreLenses");
+            if (results) {
+                for (const index in results) {
+                    lenses.push(this._formatLensItem(results[index]));
+                }
+            }
+        } catch (e) {
+            console.error(e);
+        }
+        return lenses;
+    }
+
+    async getLensByCache(hash) {
+        // TODO: implement
+        return null;
+    }
+
+    async getMoreLensesByCache(hash) {
+        // TODO: implement
         return null;
     }
 
@@ -224,7 +268,6 @@ export default class SnapLensWebCrawler {
 
             lens_name: lensItem.lensName || lensItem.name || "",
             lens_creator_search_tags: lensItem.lensCreatorSearchTags || [],
-            lens_tags: "",
             lens_status: "Live",
 
             user_display_name: lensItem.lensCreatorDisplayName || lensItem.creator?.title || lensItem.creatorName || "",
@@ -238,7 +281,6 @@ export default class SnapLensWebCrawler {
             thumbnail_media_url: lensItem.thumbnailUrl || lensItem.previewImageUrl || lensItem.lensPreviewImageUrl || "",
             thumbnail_media_poster_url: lensItem.thumbnailUrl || lensItem.previewImageUrl || lensItem.lensPreviewImageUrl || "",
             standard_media_url: lensItem.previewVideoUrl || lensItem.lensPreviewVideoUrl || "",
-            standard_media_poster_url: "",
             obfuscated_user_slug: obfuscatedSlug || "",
             image_sequence: {},
         };
@@ -254,12 +296,10 @@ export default class SnapLensWebCrawler {
         //unlock
         if (lensId && lensItem.lensResource) {
             Object.assign(result, {
-                lens_id: lensItem.lensId,
+                lens_id: lensId,
                 lens_url: lensItem.lensResource?.archiveLink || "",
                 signature: lensItem.lensResource?.signature || "",
                 sha256: lensItem.lensResource?.checkSum || "",
-                hint_id: "",
-                additional_hint_ids: {},
                 last_updated: lensItem.lensResource?.lastUpdated || ""
             });
         }
