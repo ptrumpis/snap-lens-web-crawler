@@ -6,7 +6,7 @@ import SnapLensWebCrawler from "../crawler.js";
 
 const crawler = new SnapLensWebCrawler();
 
-const sleepMs = 10000;
+const sleepMs = 9000;
 const overwriteBolts = false;
 const overwriteExistingData = false;
 
@@ -29,7 +29,11 @@ async function downloadFile(url, dest, timeout = 9000, headers) {
         await fs.writeFile(dest, Buffer.from(buffer));
 
     } catch (err) {
-        console.error(`Error downloading ${url}:`, err);
+        if (err.name === 'AbortError') {
+            console.error(`Request timeout: ${url}`);
+        } else {
+            console.error(`Error downloading ${url}:`, err);
+        }
     } finally {
         clearTimeout(timeoutId);
     }
@@ -74,16 +78,22 @@ for (const category in crawler.TOP_CATEGORIES) {
                             }
                         }
 
+                        const isLensIdMissing = (!lensInfo.unlockable_id);
                         const isUserNameMissing = (!lensInfo.user_name && lensInfo.user_display_name !== 'Snapchat');
                         const isCreatorTagsMissing = (lensInfo.lens_creator_search_tags.length === 0 && lensInfo.has_search_tags !== false);
 
                         // try to resolve missing information from single page
-                        if (!lensInfo.unlockable_id || isUserNameMissing || isCreatorTagsMissing) {
+                        if (isLensIdMissing || isUserNameMissing || isCreatorTagsMissing) {
                             await crawler._sleep(3000);
 
                             const liveLensInfo = await crawler.getLensByHash(lensInfo.uuid);
                             if (liveLensInfo) {
                                 lensInfo = crawler.mergeLensItems(lensInfo, liveLensInfo);
+
+                                // mark search tags as non existing (prevent unecessary re-crawl)
+                                if (lensInfo.lens_creator_search_tags.length === 0) {
+                                    lensInfo.has_search_tags = false;
+                                }
                             }
                         }
 
@@ -93,11 +103,6 @@ for (const category in crawler.TOP_CATEGORIES) {
                             if (cachedLensInfo) {
                                 lensInfo = crawler.mergeLensItems(lensInfo, cachedLensInfo);
                             }
-                        }
-
-                        // mark search tags as non existing (prevent re-crawl)
-                        if (lensInfo.lens_creator_search_tags.length === 0) {
-                            lensInfo.has_search_tags = false;
                         }
 
                         // download and write lens bolt to file and generate a checksum and signature file
