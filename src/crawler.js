@@ -3,17 +3,30 @@ import fetch from 'node-fetch';
 
 export default class SnapLensWebCrawler {
     SCRIPT_SELECTOR = '#__NEXT_DATA__';
+
+    TOP_CATEGORIES = {
+        default: '/',
+        face: '/category/face',
+        world: '/category/world',
+        music: '/category/music',
+        live: '/category/web_live',
+    };
+
     constructor(connectionTimeoutMs = 9000, headers = null) {
         this.json = {};
         this.connectionTimeoutMs = connectionTimeoutMs;
-        this.headers = headers || { 
+        this.headers = headers || {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'
         };
     }
 
     async getLensByHash(hash, rawOutput = false) {
         try {
-            const body = await this._loadUrl('https://lens.snapchat.com/' + hash);
+            const url = 'https://lens.snapchat.com/' + hash;
+
+            console.log('Crawling', url);
+
+            const body = await this._loadUrl(url);
             const $ = cheerio.load(body);
             const json = JSON.parse($(this.SCRIPT_SELECTOR).text());
 
@@ -24,6 +37,8 @@ export default class SnapLensWebCrawler {
 
             if (json && json?.props?.pageProps?.lensDisplayInfo) {
                 return this._lensInfoToLens(json.props.pageProps.lensDisplayInfo);
+            } else {
+                console.warn('JSON Property "props.pageProps.lensDisplayInfo" not found.', json);
             }
         } catch (e) {
             console.error(e);
@@ -32,10 +47,14 @@ export default class SnapLensWebCrawler {
     }
 
     async getLensesByCreator(obfuscatedSlug, offset = 0, limit = 100, rawOutput = false) {
+        limit = Math.min(100, limit);
         let lenses = [];
         try {
-            limit = Math.min(100, limit);
-            const jsonString = await this._loadUrl('https://lensstudio.snapchat.com/v1/creator/lenses/?limit=' + limit + '&offset=' + offset + '&order=1&slug=' + obfuscatedSlug);
+            const url = 'https://lensstudio.snapchat.com/v1/creator/lenses/?limit=' + limit + '&offset=' + offset + '&order=1&slug=' + obfuscatedSlug;
+
+            console.log('Crawling', url);
+
+            const jsonString = await this._loadUrl(url);
             if (jsonString) {
                 const json = JSON.parse(jsonString);
 
@@ -51,6 +70,8 @@ export default class SnapLensWebCrawler {
                             lenses.push(this._lensItemToLens(item, obfuscatedSlug));
                         }
                     }
+                } else {
+                    console.warn('JSON Property "lensesList" not found.', json);
                 }
             }
         } catch (e) {
@@ -63,7 +84,11 @@ export default class SnapLensWebCrawler {
         const slug = search.replace(/\W+/g, '-');
         let lenses = [];
         try {
-            const body = await this._loadUrl('https://www.snapchat.com/explore/' + slug);
+            const url = 'https://www.snapchat.com/explore/' + slug;
+
+            console.log('Crawling', url);
+
+            const body = await this._loadUrl(url);
             const $ = cheerio.load(body);
             const json = JSON.parse($(this.SCRIPT_SELECTOR).text());
 
@@ -101,6 +126,8 @@ export default class SnapLensWebCrawler {
                         }
                     }
                 }
+            } else {
+                console.warn('JSON Property "props.pageProps.encodedSearchResponse" not found.', json);
             }
         } catch (e) {
             console.error(e);
@@ -111,7 +138,11 @@ export default class SnapLensWebCrawler {
     async getUserProfileLenses(userName, rawOutput = false) {
         let lenses = [];
         try {
-            const body = await this._loadUrl('https://www.snapchat.com/add/' + userName);
+            const url = 'https://www.snapchat.com/add/' + userName;
+
+            console.log('Crawling', url);
+
+            const body = await this._loadUrl(url);
             const $ = cheerio.load(body);
             const json = JSON.parse($(this.SCRIPT_SELECTOR).text());
 
@@ -125,6 +156,8 @@ export default class SnapLensWebCrawler {
                 for (const index in results) {
                     lenses.push(this._lensInfoToLens(results[index], userName));
                 }
+            } else {
+                console.warn('JSON Property "props.pageProps.lenses" not found.', json);
             }
         } catch (e) {
             console.error(e);
@@ -132,24 +165,53 @@ export default class SnapLensWebCrawler {
         return lenses;
     }
 
-    async getTopLenses(rawOutput = false) {
+    async getTopLenses(category = 'default', maxLenses = 100, sleep = 9000, rawOutput = false) {
         let lenses = [];
         try {
-            const body = await this._loadUrl('https://www.snapchat.com/lens');
-            const $ = cheerio.load(body);
-            const json = JSON.parse($(this.SCRIPT_SELECTOR).text());
-
-            // debugging
-            if (rawOutput) {
-                return json;
+            if (!this.TOP_CATEGORIES[category]) {
+                console.error('Unknown top lens category: ', category, "\nValid top lens categories are:", Object.getOwnPropertyNames(this.TOP_CATEGORIES));
+                return null;
             }
 
-            if (json && json?.props?.pageProps?.topLenses) {
-                const results = json.props.pageProps.topLenses;
-                for (const index in results) {
-                    lenses.push(this._lensInfoToLens(results[index]));
+            const categoryBaseUrl = 'https://www.snapchat.com/lens' + this.TOP_CATEGORIES[category];
+
+            let hasMore = false;
+            let cursorId = '';
+
+            do {
+                let url = categoryBaseUrl;
+                if (hasMore && cursorId) {
+                    url = categoryBaseUrl + "?cursor_id=" + cursorId;
+                    await this._sleep(sleep);
                 }
-            }
+
+                console.log('Crawling', url);
+
+                const body = await this._loadUrl(url);
+                const $ = cheerio.load(body);
+                const json = JSON.parse($(this.SCRIPT_SELECTOR).text());
+
+                // debugging
+                if (rawOutput) {
+                    return json;
+                }
+
+                if (json && json?.props?.pageProps?.topLenses) {
+                    const results = json.props.pageProps.topLenses;
+                    for (const index in results) {
+                        if (maxLenses && lenses.length >= maxLenses) {
+                            break;
+                        }
+                        lenses.push(this._lensInfoToLens(results[index]));
+                    }
+                } else {
+                    console.warn('JSON Property "props.pageProps.topLenses" not found.', json);
+                    break;
+                }
+
+                hasMore = json?.props?.pageProps?.hasMore || false;
+                cursorId = json?.props?.pageProps?.nextCursorId || '';
+            } while (hasMore && cursorId && !(maxLenses && lenses.length >= maxLenses));
         } catch (e) {
             console.error(e);
         }
@@ -279,5 +341,11 @@ export default class SnapLensWebCrawler {
             }
         }
         return '';
+    }
+
+    _sleep(ms) {
+        return new Promise((resolve) => {
+            setTimeout(resolve, ms);
+        });
     }
 }
