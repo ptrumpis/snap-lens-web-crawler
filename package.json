@@ -1,6 +1,6 @@
 {
   "name": "snap-lens-web-crawler",
-  "version": "0.9.3",
+  "version": "1.0.0",
   "description": "Crawl and download Snap Lenses from *lens.snapchat.com* with ease.",
   "keywords": [
     "snapchat",
@@ -16,6 +16,7 @@
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
+    "crawl": "node src/scripts/crawl.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Patrick Trumpis <ptrumpis@pm.me>",
