@@ -6,7 +6,7 @@ import SnapLensWebCrawler from "../crawler.js";
 
 const crawler = new SnapLensWebCrawler();
 
-const topLensSleepMs = 6000;
+const topLensSleepMs = 1000;
 const overwriteBolts = false;
 const overwriteExistingData = false;
 
@@ -21,6 +21,8 @@ async function downloadFile(url, dest, timeout = 9000, headers) {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'
             }
         });
+
+        clearTimeout(timeoutId);
 
         if (!res.ok) throw new Error(`Failed to download ${url}, status: ${res.status}`);
 
@@ -45,7 +47,7 @@ async function generateSha256(filePath) {
 }
 
 for (const category in crawler.TOP_CATEGORIES) {
-    console.log("top lens category", category);
+    console.log("[Select]: Top Lens Category", category.toUpperCase());
 
     try {
         const topLenses = await crawler.getTopLenses(category, null, topLensSleepMs);
