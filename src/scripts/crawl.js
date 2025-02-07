@@ -65,10 +65,10 @@ for (const category in crawler.TOP_CATEGORIES) {
                             existingInfo = JSON.parse(data);
                             if (existingInfo) {
                                 if (overwriteExistingData) {
-                                    // update existing data with latest data
+                                    // update existing data with latest information
                                     lensInfo = crawler.mergeLensItems(lensInfo, existingInfo);
                                 } else {
-                                    // update missing information only
+                                    // keep existing data and add missing information only
                                     lensInfo = crawler.mergeLensItems(existingInfo, lensInfo);
                                 }
                             }
@@ -123,7 +123,7 @@ for (const category in crawler.TOP_CATEGORIES) {
 
                                 try {
                                     // actually download the lens bolt
-                                    console.log(`Downloading: ${lensInfo.lens_url}`);
+                                    console.log(`[Downloading]: ${lensInfo.lens_url}`);
                                     await downloadFile(lensInfo.lens_url, lensFilePath);
 
                                     // generate file checksum and write to file
