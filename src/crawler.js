@@ -12,12 +12,15 @@ export default class SnapLensWebCrawler {
         live: '/category/web_live',
     };
 
-    constructor(connectionTimeoutMs = 9000, headers = null) {
+    constructor({ connectionTimeoutMs = 9000, minRequestDelayMs = 1000, headers = null } = {}) {
         this.json = {};
         this.connectionTimeoutMs = connectionTimeoutMs;
+        this.minRequestDelayMs = minRequestDelayMs;
         this.headers = headers || {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'
         };
+
+        this.lastRequestTimestamps = new Map();
     }
 
     mergeLensItems(item1, item2) {
@@ -239,7 +242,21 @@ export default class SnapLensWebCrawler {
         }, this.connectionTimeoutMs);
 
         try {
+            const domain = new URL(url).hostname;
+            const now = Date.now();
+
+            if (this.lastRequestTimestamps.has(domain)) {
+                const lastRequestTime = this.lastRequestTimestamps.get(domain);
+                const elapsed = now - lastRequestTime;
+                if (elapsed < this.minRequestDelayMs) {
+                    await this._sleep(this.minRequestDelayMs - elapsed);
+                }
+            }
+
             const response = await fetch(url, { signal: controller.signal, headers: this.headers });
+
+            this.lastRequestTimestamps.set(domain, Date.now());
+
             if (response.status >= 400 && response.status <= 500) {
                 console.error("Request failed:", url, "- HTTP Status", response.status);
                 return undefined;
