@@ -12,10 +12,18 @@ export default class SnapLensWebCrawler {
         live: '/category/web_live',
     };
 
-    constructor({ connectionTimeoutMs = 9000, minRequestDelayMs = 1000, cacheTTL = 3600, headers = null } = {}) {
-        this.json = {};
-        this.connectionTimeoutMs = connectionTimeoutMs;
-        this.minRequestDelayMs = minRequestDelayMs;
+    constructor({
+        connectionTimeoutMs = 9000,
+        minRequestDelayMs = 1000,
+        cacheTTL = 3600,
+        failedRequestDelayMs = 3000,
+        maxRequestRetries = 3,
+        headers = null
+    } = {}) {
+        this.connectionTimeoutMs = Math.max(connectionTimeoutMs, 1000);
+        this.minRequestDelayMs = Math.max(minRequestDelayMs, 1000);
+        this.failedRequestDelayMs = Math.max(failedRequestDelayMs, 1000);
+        this.maxRequestRetries = Math.max(maxRequestRetries, 0);
         this.headers = headers || {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'
         };
@@ -171,7 +179,7 @@ export default class SnapLensWebCrawler {
         return lenses;
     }
 
-    async getTopLenses(category = 'default', maxLenses = 100, sleep = 9000) {
+    async getTopLenses(category = 'default', maxLenses = 100, sleep = 1000) {
         let lenses = [];
         try {
             if (!this.TOP_CATEGORIES[category]) {
@@ -214,7 +222,7 @@ export default class SnapLensWebCrawler {
 
     async _extractLensesFromUrl(url, useCache, ...jsonObjPath) {
         try {
-            if (useCache) {
+            if (useCache && this.cacheTTL) {
                 // use JSON cache to avoid unecessary requests
                 const cacheEntry = this.jsonCache.get(url);
                 if (cacheEntry) {
@@ -279,46 +287,64 @@ export default class SnapLensWebCrawler {
     }
 
     async _loadUrl(url) {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => {
-            controller.abort();
-        }, this.connectionTimeoutMs);
+        const hostname = new URL(url).hostname;
+        const now = Date.now();
 
-        try {
-            const hostname = new URL(url).hostname;
-            const now = Date.now();
+        // avoid hammering the server with too many requests
+        // by keeping track of the last request to the same hostname
+        if (this.lastRequestTimestamps.has(hostname)) {
+            const lastRequestTime = this.lastRequestTimestamps.get(hostname);
+            const elapsed = now - lastRequestTime;
+            if (elapsed < this.minRequestDelayMs) {
+                await this._sleep(this.minRequestDelayMs - elapsed);
+            }
+        }
 
-            // avoid hammering the server with too many requests
-            // by keeping track of the last request to the same hostname
-            if (this.lastRequestTimestamps.has(hostname)) {
-                const lastRequestTime = this.lastRequestTimestamps.get(hostname);
-                const elapsed = now - lastRequestTime;
-                if (elapsed < this.minRequestDelayMs) {
-                    await this._sleep(this.minRequestDelayMs - elapsed);
+        const response = await this._fetch(url);
+
+        // update last request time
+        this.lastRequestTimestamps.set(hostname, Date.now());
+
+        return response;
+    }
+
+    async _fetch(url) {
+        let attempt = 1;
+        let maxAttempts = this.maxRequestRetries + 1;
+
+        while (attempt <= maxAttempts) {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => {
+                controller.abort();
+            }, this.connectionTimeoutMs);
+
+            try {
+                const response = await fetch(url, { signal: controller.signal, headers: this.headers });
+                clearTimeout(timeout);
+
+                if (response.status >= 400 && response.status < 600) {
+                    const statusError = new Error(`HTTP Status ${response.status}`);
+                    statusError.name = 'ResponseStatus';
+                    throw statusError
                 }
+
+                return await response.text();
+            } catch (e) {
+                if (e.name === 'ResponseStatus') {
+                    console.error(`[Failed] (${attempt}/${maxAttempts}):`, url, "-", e.message);
+                } else if (e.name === 'AbortError') {
+                    console.error(`[Timeout] (${attempt}/${maxAttempts}):`, url);
+                } else {
+                    console.error(`[Error] (${attempt}/${maxAttempts}):`, url, e);
+                }
+            } finally {
+                clearTimeout(timeout);
             }
 
-            const response = await fetch(url, { signal: controller.signal, headers: this.headers });
-
-            // update last request time
-            this.lastRequestTimestamps.set(hostname, Date.now());
-
-            if (response.status >= 400 && response.status <= 500) {
-                console.error("Request failed:", url, "- HTTP Status", response.status);
-                return undefined;
-            } else if (response.status !== 200) {
-                console.warn("Unexpected HTTP status:", response.status, "-", url);
+            attempt++;
+            if (attempt <= maxAttempts) {
+                await this._sleep(this.failedRequestDelayMs);
             }
-
-            return await response.text();
-        } catch (e) {
-            if (e.name === 'AbortError') {
-                console.error('Request timeout:', url);
-            } else {
-                console.error('Request error:', url, e);
-            }
-        } finally {
-            clearTimeout(timeout);
         }
 
         return undefined;
