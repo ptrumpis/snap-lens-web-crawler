@@ -2,6 +2,9 @@
 node_modules/
 package-lock.json
 
+# needed for development tests
+/input
+
 # ignore everything in output except the .gitignore files
 /output/*
 !/output/bolts/
