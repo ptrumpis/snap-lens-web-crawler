@@ -25,7 +25,7 @@ export default class SnapLensWebCrawler {
 
     mergeLensItems(item1, item2) {
         function isEmpty(value) {
-            return !value ||
+            return (!value && value !== false) ||
                 (Array.isArray(value) && value.length === 0) ||
                 (typeof value === "object" && value !== null && Object.keys(value).length === 0);
         }
