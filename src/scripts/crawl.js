@@ -6,7 +6,7 @@ import SnapLensWebCrawler from "../crawler.js";
 
 const crawler = new SnapLensWebCrawler();
 
-const sleepMs = 9000;
+const topLensSleepMs = 6000;
 const overwriteBolts = false;
 const overwriteExistingData = false;
 
@@ -48,7 +48,7 @@ for (const category in crawler.TOP_CATEGORIES) {
     console.log("top lens category", category);
 
     try {
-        const topLenses = await crawler.getTopLenses(category, null, sleepMs);
+        const topLenses = await crawler.getTopLenses(category, null, topLensSleepMs);
         if (topLenses) {
             for (let lensInfo of topLenses) {
                 try {
@@ -84,8 +84,6 @@ for (const category in crawler.TOP_CATEGORIES) {
 
                         // try to resolve missing information from single page
                         if (isLensIdMissing || isUserNameMissing || isCreatorTagsMissing) {
-                            await crawler._sleep(3000);
-
                             const liveLensInfo = await crawler.getLensByHash(lensInfo.uuid);
                             if (liveLensInfo) {
                                 lensInfo = crawler.mergeLensItems(lensInfo, liveLensInfo);
@@ -159,6 +157,8 @@ for (const category in crawler.TOP_CATEGORIES) {
                         } catch (err) {
                             console.error(`Error trying to save ${infoFilePath}:`, err);
                         }
+
+                        // TODO: store uuid, user_name, tags, lens_name for further crawling
                     } else {
                         console.warn("Lens UUID is missing.", lensInfo);
                     }
