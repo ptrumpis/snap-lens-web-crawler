@@ -12,7 +12,7 @@ export default class SnapLensWebCrawler {
         live: '/category/web_live',
     };
 
-    constructor({ connectionTimeoutMs = 9000, minRequestDelayMs = 1000, headers = null } = {}) {
+    constructor({ connectionTimeoutMs = 9000, minRequestDelayMs = 1000, cacheTTL = 3600, headers = null } = {}) {
         this.json = {};
         this.connectionTimeoutMs = connectionTimeoutMs;
         this.minRequestDelayMs = minRequestDelayMs;
@@ -21,6 +21,9 @@ export default class SnapLensWebCrawler {
         };
 
         this.lastRequestTimestamps = new Map();
+        this.jsonCache = new Map();
+
+        this.cacheTTL = cacheTTL * 1000;
     }
 
     mergeLensItems(item1, item2) {
@@ -44,7 +47,7 @@ export default class SnapLensWebCrawler {
     async getLensByHash(hash) {
         try {
             const url = 'https://lens.snapchat.com/' + hash;
-            const lens = await this._extractLensesFromUrl(url, "props.pageProps.lensDisplayInfo");
+            const lens = await this._extractLensesFromUrl(url, true, "props.pageProps.lensDisplayInfo");
             if (lens) {
                 return this._formatLensItem(lens);
             }
@@ -58,7 +61,7 @@ export default class SnapLensWebCrawler {
         let lenses = [];
         try {
             const url = 'https://lens.snapchat.com/' + hash;
-            const results = await this._extractLensesFromUrl(url, "props.pageProps.moreLenses");
+            const results = await this._extractLensesFromUrl(url, true, "props.pageProps.moreLenses");
             if (results) {
                 for (const index in results) {
                     lenses.push(this._formatLensItem(results[index]));
@@ -111,7 +114,7 @@ export default class SnapLensWebCrawler {
         let lenses = [];
         try {
             const url = 'https://www.snapchat.com/explore/' + slug;
-            const results = await this._extractLensesFromUrl(url, "props.pageProps.initialApolloState", "props.pageProps.encodedSearchResponse");
+            const results = await this._extractLensesFromUrl(url, false, "props.pageProps.initialApolloState", "props.pageProps.encodedSearchResponse");
             if (results) {
                 if (typeof results === 'object') {
                     // original data structure
@@ -125,17 +128,20 @@ export default class SnapLensWebCrawler {
                 } else if (typeof results === 'string') {
                     // new data structure introduced in summer 2024
                     const searchResult = JSON.parse(results);
-                    let sectionResults = [];
+                    let lensSectionResults = [];
+
+                    // try to find "Lenses" section
                     for (const index in searchResult.sections) {
                         if (searchResult.sections[index].title === 'Lenses') {
-                            sectionResults = searchResult.sections[index].results;
+                            lensSectionResults = searchResult.sections[index].results;
                             break;
                         }
                     }
 
-                    for (const index in sectionResults) {
-                        if (sectionResults[index]?.result?.lens) {
-                            let lens = sectionResults[index].result.lens;
+                    // save each lens
+                    for (const index in lensSectionResults) {
+                        if (lensSectionResults[index]?.result?.lens) {
+                            let lens = lensSectionResults[index].result.lens;
                             if (lens.lensId && lens.deeplinkUrl && lens.name) {
                                 lenses.push(this._formatLensItem(lens));
                             }
@@ -153,7 +159,7 @@ export default class SnapLensWebCrawler {
         let lenses = [];
         try {
             const url = 'https://www.snapchat.com/add/' + userName;
-            const results = await this._extractLensesFromUrl(url, "props.pageProps.lenses");
+            const results = await this._extractLensesFromUrl(url, false, "props.pageProps.lenses");
             if (results) {
                 for (const index in results) {
                     lenses.push(this._formatLensItem(results[index], userName));
@@ -175,6 +181,7 @@ export default class SnapLensWebCrawler {
 
             const categoryBaseUrl = 'https://www.snapchat.com/lens' + this.TOP_CATEGORIES[category];
 
+            // loop through all "load more lenses" pages identified by a cursor ID
             let hasMore = false;
             let cursorId = '';
             do {
@@ -184,7 +191,7 @@ export default class SnapLensWebCrawler {
                     await this._sleep(sleep);
                 }
 
-                const pageProps = await this._extractLensesFromUrl(url, "props.pageProps");
+                const pageProps = await this._extractLensesFromUrl(url, false, "props.pageProps");
                 if (pageProps?.topLenses) {
                     const results = pageProps.topLenses;
                     for (const index in results) {
@@ -195,6 +202,7 @@ export default class SnapLensWebCrawler {
                     }
                 }
 
+                // more pages to load are identified by next cursor ID and a boolean flag 
                 hasMore = pageProps?.hasMore || false;
                 cursorId = pageProps?.nextCursorId || '';
             } while (hasMore && cursorId && !(maxLenses && lenses.length >= maxLenses));
@@ -204,30 +212,65 @@ export default class SnapLensWebCrawler {
         return lenses;
     }
 
-    async _extractLensesFromUrl(url, ...jsonObjPath) {
+    async _extractLensesFromUrl(url, useCache, ...jsonObjPath) {
         try {
-            console.log('Crawling:', url);
+            if (useCache) {
+                // use JSON cache to avoid unecessary requests
+                const cacheEntry = this.jsonCache.get(url);
+                if (cacheEntry) {
+                    if ((Date.now() - cacheEntry.timestamp) >= this.cacheTTL) {
+                        // cache TTL expired
+                        this.jsonCache.delete(url);
+                    } else {
+                        console.log('[Get Cache]:', url);
 
-            const body = await this._loadUrl(url);
-            if (typeof body === 'string' && body) {
-                const $ = cheerio.load(body);
-                const jsonString = $(this.SCRIPT_SELECTOR).text();
-                if (typeof jsonString === 'string' && jsonString) {
-                    const jsonObj = JSON.parse(jsonString);
-                    if (jsonObj) {
-                        const lenses = this._getProperty(jsonObj, ...jsonObjPath);
-                        if (typeof lenses !== 'undefined') {
-                            return lenses;
-                        } else {
+                        // try to get lens object from cached JSON object
+                        const lensObjFromPropertyPath = this._getProperty(cacheEntry.jsonObj, ...jsonObjPath);
+                        if (typeof lensObjFromPropertyPath === 'undefined') {
                             console.warn('JSON property path not found', jsonObjPath, jsonObj);
                         }
-                    } else {
-                        console.warn('Unable to parse JSON string', jsonString);
+                        return lensObjFromPropertyPath; // object|undefined
                     }
-                } else {
-                    console.warn('Unable to read script tag', this.SCRIPT_SELECTOR);
                 }
             }
+
+            console.log('[Crawling]:', url);
+
+            const body = await this._loadUrl(url);
+            if (typeof body !== 'string' || !body) {
+                // request failed
+                return undefined;
+            }
+
+            const $ = cheerio.load(body);
+
+            // extract lens info from script tag
+            const jsonString = $(this.SCRIPT_SELECTOR).text();
+            if (typeof jsonString !== 'string' || !jsonString) {
+                console.warn('Unable to read script tag', this.SCRIPT_SELECTOR);
+                return undefined;
+            }
+
+            const jsonObj = JSON.parse(jsonString);
+            if (!jsonObj) {
+                console.warn('Unable to parse JSON string', jsonString);
+                return undefined;
+            }
+
+            // store parsed JSON inside cache
+            // to avoid unecessary future requests and parsing
+            if (useCache) {
+                this.jsonCache.set(url, {
+                    jsonObj: jsonObj,
+                    timestamp: Date.now()
+                });
+            }
+
+            const lensObjFromPropertyPath = this._getProperty(jsonObj, ...jsonObjPath);
+            if (typeof lensObjFromPropertyPath === 'undefined') {
+                console.warn('JSON property path not found', jsonObjPath, jsonObj);
+            }
+            return lensObjFromPropertyPath; // object|undefined
         } catch (e) {
             console.error('Error extracting lenses from URL:', url, e);
         }
@@ -242,11 +285,13 @@ export default class SnapLensWebCrawler {
         }, this.connectionTimeoutMs);
 
         try {
-            const domain = new URL(url).hostname;
+            const hostname = new URL(url).hostname;
             const now = Date.now();
 
-            if (this.lastRequestTimestamps.has(domain)) {
-                const lastRequestTime = this.lastRequestTimestamps.get(domain);
+            // avoid hammering the server with too many requests
+            // by keeping track of the last request to the same hostname
+            if (this.lastRequestTimestamps.has(hostname)) {
+                const lastRequestTime = this.lastRequestTimestamps.get(hostname);
                 const elapsed = now - lastRequestTime;
                 if (elapsed < this.minRequestDelayMs) {
                     await this._sleep(this.minRequestDelayMs - elapsed);
@@ -255,7 +300,8 @@ export default class SnapLensWebCrawler {
 
             const response = await fetch(url, { signal: controller.signal, headers: this.headers });
 
-            this.lastRequestTimestamps.set(domain, Date.now());
+            // update last request time
+            this.lastRequestTimestamps.set(hostname, Date.now());
 
             if (response.status >= 400 && response.status <= 500) {
                 console.error("Request failed:", url, "- HTTP Status", response.status);
