@@ -1,10 +1,33 @@
+import crypto from "crypto";
+import csv from 'csv-parser';
 import fs from "fs/promises";
 import path from "path";
-import crypto from "crypto";
+import { createReadStream } from 'fs';
+import { pipeline } from 'stream/promises';
 import SnapLensWebCrawler from "../../crawler.js";
 
 const crawler = new SnapLensWebCrawler();
 let resolvedLensCache = new Map();
+
+async function readCSV(filePath, separator = ';') {
+    const results = [];
+    await pipeline(
+        createReadStream(filePath, { encoding: 'utf8' })
+            .pipe(csv({
+                mapHeaders: ({ header, index }) => header.trim().toLowerCase(),
+                separator: separator,
+            })),
+        async function* (source) {
+            for await (const row of source) {
+                const cleanedRow = Object.fromEntries(
+                    Object.entries(row).map(([key, value]) => [key.trim(), value.trim()])
+                );
+                results.push(cleanedRow);
+            }
+        }
+    );
+    return results;
+}
 
 async function generateSha256(filePath) {
     const data = await fs.readFile(filePath);
@@ -46,7 +69,7 @@ async function crawlLenses(lenses, { overwriteBolts = false, overwriteExistingDa
 
                 const isLensIdMissing = (!lensInfo.unlockable_id);
                 const isUserNameMissing = (!lensInfo.user_name && lensInfo.user_display_name !== 'Snapchat');
-                const isCreatorTagsMissing = (lensInfo.lens_creator_search_tags.length === 0 && lensInfo.has_search_tags !== false);
+                const isCreatorTagsMissing = (lensInfo.lens_creator_search_tags?.length === 0 && lensInfo.has_search_tags !== false);
 
                 // try to resolve missing information from single page
                 if (isLensIdMissing || isUserNameMissing || isCreatorTagsMissing) {
@@ -99,23 +122,24 @@ async function crawlLenses(lenses, { overwriteBolts = false, overwriteExistingDa
 
                         try {
                             // actually download the lens bolt
-                            await crawler.downloadFile(lensInfo.lens_url, lensFilePath);
+                            const downloadSuccess = await crawler.downloadFile(lensInfo.lens_url, lensFilePath);
+                            if (downloadSuccess) {
+                                // generate file checksum and write to file
+                                const generatedSha256 = await generateSha256(lensFilePath);
+                                await fs.writeFile(sha256FilePath, generatedSha256, "utf8");
 
-                            // generate file checksum and write to file
-                            const generatedSha256 = await generateSha256(lensFilePath);
-                            await fs.writeFile(sha256FilePath, generatedSha256, "utf8");
+                                // show warning if checksum is mismatching with crawled info
+                                if (lensInfo.sha256 && lensInfo.sha256.toUpperCase() !== generatedSha256) {
+                                    console.warn(`SHA256 mismatch for bolt ${lensInfo.uuid}: expected ${lensInfo.sha256}, got ${generatedSha256}`);
 
-                            // show warning if checksum is mismatching with crawled info
-                            if (lensInfo.sha256 && lensInfo.sha256.toUpperCase() !== generatedSha256) {
-                                console.warn(`SHA256 mismatch for bolt ${lensInfo.uuid}: expected ${lensInfo.sha256}, got ${generatedSha256}`);
+                                    // update lens info with actual checksum on mismatch
+                                    lensInfo.sha256 = generatedSha256;
+                                }
 
-                                // update lens info with actual checksum on mismatch
-                                lensInfo.sha256 = generatedSha256;
-                            }
-
-                            // write signature to file
-                            if (lensInfo.signature) {
-                                await fs.writeFile(sigFilePath, lensInfo.signature, "utf8");
+                                // write signature to file
+                                if (lensInfo.signature) {
+                                    await fs.writeFile(sigFilePath, lensInfo.signature, "utf8");
+                                }
                             }
                         } catch (e) {
                             console.error(e);
@@ -145,4 +169,4 @@ async function crawlLenses(lenses, { overwriteBolts = false, overwriteExistingDa
     }
 }
 
-export { crawlLenses };
+export { readCSV, crawlLenses };
