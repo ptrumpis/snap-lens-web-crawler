@@ -1,5 +1,7 @@
 import * as cheerio from 'cheerio';
 import fetch from 'node-fetch';
+import fs from 'fs/promises';
+import path from 'path';
 
 export default class SnapLensWebCrawler {
     SCRIPT_SELECTOR = '#__NEXT_DATA__';
@@ -20,15 +22,15 @@ export default class SnapLensWebCrawler {
 
     constructor({
         connectionTimeoutMs = 9000,
-        minRequestDelayMs = 1000,
+        minRequestDelayMs = 500,
         cacheTTL = 3600,
         failedRequestDelayMs = 3000,
         maxRequestRetries = 2,
         headers = null
     } = {}) {
-        this.connectionTimeoutMs = Math.max(connectionTimeoutMs, 100);
+        this.connectionTimeoutMs = Math.max(connectionTimeoutMs, 1000);
         this.minRequestDelayMs = Math.max(minRequestDelayMs, 100);
-        this.failedRequestDelayMs = Math.max(failedRequestDelayMs, 100);
+        this.failedRequestDelayMs = Math.max(failedRequestDelayMs, this.minRequestDelayMs);
         this.maxRequestRetries = Math.max(maxRequestRetries, 0);
         this.headers = headers || {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'
@@ -41,11 +43,26 @@ export default class SnapLensWebCrawler {
     }
 
     clearCache() {
-        this.jsonCache = new Map();
+        this.jsonCache.clear();
+        this.lastRequestTimestamps.clear();
     }
 
-    clearTimestamps() {
-        this.lastRequestTimestamps = new Map();
+    async downloadFile(url, dest) {
+        console.log(`[Downloading]: ${url}`);
+
+        try {
+            const response = await this._requestGently(url, 'GET');
+            if (!response.ok) {
+                console.error(`[Download Error]: ${url} - HTTP Status ${response.status}`);
+                return;
+            }
+
+            const buffer = await response.arrayBuffer();
+            await fs.mkdir(path.dirname(dest), { recursive: true });
+            await fs.writeFile(dest, Buffer.from(buffer));
+        } catch (e) {
+            console.error(e);
+        }
     }
 
     mergeLensItems(item1, item2) {
@@ -293,7 +310,7 @@ export default class SnapLensWebCrawler {
                         // cache TTL expired
                         this.jsonCache.delete(url);
                     } else {
-                        console.log('[Get Cache]:', url);
+                        console.log('[Read Cache]:', url);
 
                         // try to get lens object from cached JSON object
                         const lensObjFromPropertyPath = this._getProperty(cacheEntry.jsonObj, ...jsonObjPath);
@@ -351,6 +368,18 @@ export default class SnapLensWebCrawler {
 
     async _loadUrl(url) {
         try {
+            const response = await this._requestGently(url, 'GET');
+            if (response.ok) {
+                return await response.text();
+            }
+        } catch (e) {
+            console.error(e);
+        }
+        return undefined;
+    }
+
+    async _requestGently(url, method = 'GET') {
+        try {
             const hostname = new URL(url).hostname;
             const now = Date.now();
 
@@ -364,12 +393,7 @@ export default class SnapLensWebCrawler {
                 }
             }
 
-            const response = await this._get(url);
-
-            // update last request time
-            this.lastRequestTimestamps.set(hostname, Date.now());
-
-            return response;
+            return await this._request(url, method);
         } catch (e) {
             console.error(e);
         }
@@ -377,9 +401,18 @@ export default class SnapLensWebCrawler {
         return undefined;
     }
 
-    async _get(url) {
+    async _request(url, method = 'GET') {
         let attempt = 1;
         let maxAttempts = this.maxRequestRetries + 1;
+        let hostname = null;
+
+        try {
+            hostname = new URL(url).hostname;
+        } catch (e) {
+            // invalid url
+            console.error(e);
+            return undefined;
+        }
 
         while (attempt <= maxAttempts) {
             const controller = new AbortController();
@@ -388,16 +421,20 @@ export default class SnapLensWebCrawler {
             }, this.connectionTimeoutMs);
 
             try {
-                const response = await fetch(url, { signal: controller.signal, headers: this.headers });
+                // update last request time
+                this.lastRequestTimestamps.set(hostname, Date.now());
+
+                const response = await fetch(url, { method: method, signal: controller.signal, headers: this.headers });
                 clearTimeout(timeout);
 
+                // trigger retry 
                 if (response.status >= 400 && response.status < 600) {
                     const statusError = new Error(`HTTP Status ${response.status}`);
                     statusError.name = 'ResponseStatus';
                     throw statusError
                 }
 
-                return await response.text();
+                return response;
             } catch (e) {
                 if (e.name === 'ResponseStatus') {
                     console.error(`[Failed] (${attempt}/${maxAttempts}):`, url, "-", e.message);
