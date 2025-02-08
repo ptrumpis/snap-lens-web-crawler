@@ -6,9 +6,9 @@ import SnapLensWebCrawler from "../crawler.js";
 
 const crawler = new SnapLensWebCrawler();
 
-const topLensSleepMs = 1000;
 const overwriteBolts = false;
 const overwriteExistingData = false;
+const saveIncompleteLensInfo = false;
 
 async function downloadFile(url, dest, timeout = 9000, headers) {
     const controller = new AbortController();
@@ -50,7 +50,7 @@ for (const category in crawler.TOP_CATEGORIES) {
     console.log("[Select]: Top Lens Category", category.toUpperCase());
 
     try {
-        const topLenses = await crawler.getTopLenses(category, null, topLensSleepMs);
+        const topLenses = await crawler.getTopLenses(category, null);
         if (topLenses) {
             for (let lensInfo of topLenses) {
                 try {
@@ -97,9 +97,9 @@ for (const category in crawler.TOP_CATEGORIES) {
                             }
                         }
 
-                        // try to resolve missing urls from cache
+                        // try to resolve missing urls from archived snapshots
                         if (!lensInfo.lens_url) {
-                            const cachedLensInfo = await crawler.getLensByCache(lensInfo.uuid);
+                            const cachedLensInfo = await crawler.getLensByArchivedSnapshot(lensInfo.uuid);
                             if (cachedLensInfo) {
                                 lensInfo = crawler.mergeLensItems(lensInfo, cachedLensInfo);
                             }
@@ -153,11 +153,13 @@ for (const category in crawler.TOP_CATEGORIES) {
                             console.warn("URL missing for lens", lensInfo.uuid);
                         }
 
-                        try {
-                            // write lens info to json file
-                            await fs.writeFile(infoFilePath, JSON.stringify(lensInfo, null, 2), "utf8");
-                        } catch (err) {
-                            console.error(`Error trying to save ${infoFilePath}:`, err);
+                        // write lens info to json file
+                        if (lensInfo.lens_url || saveIncompleteLensInfo) {
+                            try {
+                                await fs.writeFile(infoFilePath, JSON.stringify(lensInfo, null, 2), "utf8");
+                            } catch (err) {
+                                console.error(`Error trying to save ${infoFilePath}:`, err);
+                            }
                         }
 
                         // TODO: store uuid, user_name, tags, lens_name for further crawling
