@@ -1,7 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
 import crypto from "crypto";
-import fetch from "node-fetch";
 import SnapLensWebCrawler from "../crawler.js";
 
 const crawler = new SnapLensWebCrawler();
@@ -10,36 +9,7 @@ const overwriteBolts = false;
 const overwriteExistingData = false;
 const saveIncompleteLensInfo = false;
 
-async function downloadFile(url, dest, timeout = 9000, headers) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-    try {
-        const res = await fetch(url, {
-            signal: controller.signal,
-            headers: headers || {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'
-            }
-        });
-
-        clearTimeout(timeoutId);
-
-        if (!res.ok) throw new Error(`Failed to download ${url}, status: ${res.status}`);
-
-        const buffer = await res.arrayBuffer();
-        await fs.mkdir(path.dirname(dest), { recursive: true });
-        await fs.writeFile(dest, Buffer.from(buffer));
-
-    } catch (err) {
-        if (err.name === 'AbortError') {
-            console.error(`Request timeout: ${url}`);
-        } else {
-            console.error(`Error downloading ${url}:`, err);
-        }
-    } finally {
-        clearTimeout(timeoutId);
-    }
-}
+let resolvedLensCache = new Map();
 
 async function generateSha256(filePath) {
     const data = await fs.readFile(filePath);
@@ -55,6 +25,10 @@ for (const category in crawler.TOP_CATEGORIES) {
             for (let lensInfo of topLenses) {
                 try {
                     if (lensInfo.uuid) {
+                        if (resolvedLensCache.has(lensInfo.uuid)) {
+                            continue;
+                        }
+
                         const infoFolderPath = path.resolve(`./output/info/${lensInfo.uuid}`);
                         const infoFilePath = path.join(infoFolderPath, "lens.json");
 
@@ -98,12 +72,22 @@ for (const category in crawler.TOP_CATEGORIES) {
                         }
 
                         // try to resolve missing urls from archived snapshots
-                        if (!lensInfo.lens_url) {
+                        if (!lensInfo.lens_url && lensInfo.has_archived_snapshots !== false) {
                             const cachedLensInfo = await crawler.getLensByArchivedSnapshot(lensInfo.uuid);
                             if (cachedLensInfo) {
                                 lensInfo = crawler.mergeLensItems(lensInfo, cachedLensInfo);
+
+                                // mark the existance of archived snapshots (prevent unecessary re-crawl)
+                                if (lensInfo.lens_url) {
+                                    lensInfo.has_archived_snapshots = true;
+                                } else {
+                                    lensInfo.has_archived_snapshots = false;
+                                }
                             }
                         }
+
+                        // mark lens as resolved for the current crawl iteration since there are no more sources to query
+                        resolvedLensCache.set(lensInfo.uuid, true);
 
                         // download and write lens bolt to file and generate a checksum and signature file
                         if (lensInfo.lens_url) {
@@ -125,8 +109,7 @@ for (const category in crawler.TOP_CATEGORIES) {
 
                                 try {
                                     // actually download the lens bolt
-                                    console.log(`[Downloading]: ${lensInfo.lens_url}`);
-                                    await downloadFile(lensInfo.lens_url, lensFilePath);
+                                    await crawler.downloadFile(lensInfo.lens_url, lensFilePath);
 
                                     // generate file checksum and write to file
                                     const generatedSha256 = await generateSha256(lensFilePath);
@@ -175,3 +158,6 @@ for (const category in crawler.TOP_CATEGORIES) {
         console.error(e);
     }
 };
+
+// clear resolved cache for next crawl iteration
+resolvedLensCache.clear();
