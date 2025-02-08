@@ -52,17 +52,20 @@ export default class SnapLensWebCrawler {
 
         try {
             const response = await this._requestGently(url, 'GET');
-            if (!response.ok) {
-                console.error(`[Download Error]: ${url} - HTTP Status ${response.status}`);
-                return;
-            }
+            if (response?.ok) {
+                const buffer = await response.arrayBuffer();
+                await fs.mkdir(path.dirname(dest), { recursive: true });
+                await fs.writeFile(dest, Buffer.from(buffer));
 
-            const buffer = await response.arrayBuffer();
-            await fs.mkdir(path.dirname(dest), { recursive: true });
-            await fs.writeFile(dest, Buffer.from(buffer));
+                return true;
+            } else if (response?.status) {
+                console.error(`[Download Error]: ${url} - Unexpected HTTP Status ${response.status}`);
+            }
         } catch (e) {
             console.error(e);
         }
+
+        return false;
     }
 
     mergeLensItems(item1, item2) {
@@ -369,7 +372,7 @@ export default class SnapLensWebCrawler {
     async _loadUrl(url) {
         try {
             const response = await this._requestGently(url, 'GET');
-            if (response.ok) {
+            if (response && response.ok) {
                 return await response.text();
             }
         } catch (e) {
