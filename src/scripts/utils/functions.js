@@ -164,8 +164,6 @@ async function crawlLenses(lenses, { overwriteBolts = false, overwriteExistingDa
 
                     // check if file is does not exist otherwise overwrite existing file if flag is set
                     if (!fileExists || overwriteBolts) {
-                        await crawler._sleep(1000);
-
                         try {
                             // actually download the lens bolt
                             const downloadSuccess = await crawler.downloadFile(lensInfo.lens_url, lensFilePath);
