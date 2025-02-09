@@ -9,8 +9,8 @@ export default class SnapLensWebCrawler {
     // snapshots from 2025 will not work
     SNAPSHOT_THRESHOLD = 20241231235959;
 
-    // try to get snapshots from 2022
-    TIMESTAMP_2022_01_01 = 1640995200;
+    // try to get snapshots from 2022-2024
+    SNAPSHOT_TIMESTAMP = 20230601;
 
     TOP_CATEGORIES = {
         default: '/',
@@ -246,9 +246,10 @@ export default class SnapLensWebCrawler {
 
     async getLensByArchivedSnapshot(hash) {
         const lensUrls = [
-            `https://www.snapchat.com/lens/${hash}?type=SNAPCODE&metadata=01`,
-            `https://www.snapchat.com/lens/${hash}`,
+            // ordered by highest chance of success
             `https://lens.snapchat.com/${hash}`,
+            `https://www.snapchat.com/lens/${hash}`,
+            `https://www.snapchat.com/lens/${hash}?type=SNAPCODE&metadata=01`,
         ];
 
         let lens = null;
@@ -257,7 +258,7 @@ export default class SnapLensWebCrawler {
                 console.log('[Wayback Machine]:', lensUrls[index]);
 
                 // use official API: https://archive.org/help/wayback_api.php
-                const apiUrl = `https://archive.org/wayback/available?url=${encodeURIComponent(lensUrls[index])}&timestamp=${this.TIMESTAMP_2022_01_01}`;
+                const apiUrl = `https://archive.org/wayback/available?url=${encodeURIComponent(lensUrls[index])}&timestamp=${this.SNAPSHOT_TIMESTAMP}`;
                 const jsonString = await this._loadUrl(apiUrl);
                 if (!jsonString) {
                     continue;
@@ -460,11 +461,11 @@ export default class SnapLensWebCrawler {
     }
 
     _formatLensItem(lensItem, options = {}) {
-        const { obfuscatedSlug = '', userName = '', hash = '' } = options;
+        const { obfuscatedSlug = '', userName = '', hash = '', unlockableId = '' } = options;
 
         const deeplinkUrl = lensItem.deeplinkUrl || lensItem.unlockUrl || "";
         const uuid = lensItem.scannableUuid || this._extractUuidFromDeeplink(deeplinkUrl) || hash || "";
-        const lensId = lensItem.lensId || lensItem.id || "";
+        const lensId = lensItem.lensId || lensItem.id || unlockableId || "";
 
         let result = {
             //lens
@@ -500,9 +501,9 @@ export default class SnapLensWebCrawler {
         }
 
         //unlock
-        if (lensId && lensItem.lensResource) {
+        if (lensItem.lensResource) {
             Object.assign(result, {
-                lens_id: lensId,
+                lens_id: lensId || "",
                 lens_url: lensItem.lensResource?.archiveLink || "",
                 signature: lensItem.lensResource?.signature || "",
                 sha256: lensItem.lensResource?.checkSum || "",
