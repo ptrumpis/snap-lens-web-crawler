@@ -7,7 +7,8 @@ import { pipeline } from 'stream/promises';
 import SnapLensWebCrawler from "../../crawler.js";
 
 const crawler = new SnapLensWebCrawler();
-let resolvedLensCache = new Map();
+
+const resolvedLensCache = new Map();
 
 async function detectSeparator(filePath) {
     const separators = [',', ';', '\t', '|'];
@@ -155,38 +156,46 @@ async function crawlLenses(lenses, { overwriteBolts = false, overwriteExistingDa
                     const sha256FilePath = path.join(boltFolderPath, "lens.sha256");
                     const sigFilePath = path.join(boltFolderPath, "lens.sig");
 
-                    let fileExists = false;
+                    let boltFileExists = false;
                     try {
                         // check if file was previously downloaded
                         await fs.access(lensFilePath);
-                        fileExists = true;
+                        boltFileExists = true;
                     } catch { }
 
-                    // check if file is does not exist otherwise overwrite existing file if flag is set
-                    if (!fileExists || overwriteBolts) {
+                    // check if file is does not exist
+                    // otherwise overwrite existing file if flag is set
+                    if (!boltFileExists || overwriteBolts) {
                         try {
                             // actually download the lens bolt
-                            const downloadSuccess = await crawler.downloadFile(lensInfo.lens_url, lensFilePath);
-                            if (downloadSuccess) {
-                                // generate file checksum and write to file
-                                const generatedSha256 = await generateSha256(lensFilePath);
-                                await fs.writeFile(sha256FilePath, generatedSha256, "utf8");
+                            if (await crawler.downloadFile(lensInfo.lens_url, lensFilePath)) {
+                                boltFileExists = true;
 
-                                // show warning if checksum is mismatching with crawled info
-                                if (lensInfo.sha256 && lensInfo.sha256.toUpperCase() !== generatedSha256) {
-                                    console.warn(`SHA256 mismatch for bolt ${lensInfo.uuid}: expected ${lensInfo.sha256}, got ${generatedSha256}`);
-
-                                    // update lens info with actual checksum on mismatch
-                                    lensInfo.sha256 = generatedSha256;
-                                }
-
-                                // write signature to file
-                                if (lensInfo.signature) {
-                                    await fs.writeFile(sigFilePath, lensInfo.signature, "utf8");
-                                }
+                                // generate new file checksum
+                                lensInfo.sha256 = await generateSha256(lensFilePath);
                             }
                         } catch (e) {
                             console.error(e);
+                        }
+
+                        if (boltFileExists) {
+                            // write sha256 checksum to file
+                            if (lensInfo.sha256) {
+                                try {
+                                    await fs.writeFile(sha256FilePath, lensInfo.sha256, "utf8");
+                                } catch (e) {
+                                    console.error(e);
+                                }
+                            }
+
+                            // write signature to file
+                            if (lensInfo.signature) {
+                                try {
+                                    await fs.writeFile(sigFilePath, lensInfo.signature, "utf8");
+                                } catch (e) {
+                                    console.error(e);
+                                }
+                            }
                         }
                     }
                 } else {
@@ -197,6 +206,7 @@ async function crawlLenses(lenses, { overwriteBolts = false, overwriteExistingDa
                 // write lens info to json file
                 if (lensInfo.lens_url || saveIncompleteLensInfo) {
                     try {
+                        // use template to create uniform property order
                         lensInfo = crawler.mergeLensItems(lensInfo, getLensInfoTemplate());
 
                         await fs.writeFile(infoFilePath, JSON.stringify(lensInfo, null, 2), "utf8");
@@ -208,7 +218,7 @@ async function crawlLenses(lenses, { overwriteBolts = false, overwriteExistingDa
                 console.warn("Lens UUID is missing.", lensInfo);
             }
         } catch (e) {
-            console.error("Error trying to process lens", lensInfo, e);
+            console.error("Error trying to process lens", lensInfo.uuid, e);
         }
     }
 }
