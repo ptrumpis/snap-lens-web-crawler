@@ -10,6 +10,9 @@ const crawler = new SnapLensWebCrawler();
 
 const resolvedLensCache = new Map();
 
+const boltBasePath = "./output/bolts/";
+const infoBasePath = "./output/info/";
+
 async function detectSeparator(filePath) {
     const separators = [',', ';', '\t', '|'];
     const data = await fs.readFile(filePath, 'utf8');
@@ -64,7 +67,7 @@ function isLensInfoMissing(lensInfo) {
     return (isLensIdMissing || isLensNameMissing || isUserNameMissing || isCreatorTagsMissing);
 }
 
-async function crawlLenses(lenses, { overwriteBolts = false, overwriteExistingData = false, saveIncompleteLensInfo = false } = {}) {
+async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteExistingData = false, saveIncompleteLensInfo = false } = {}) {
     for (let lensInfo of lenses) {
         try {
             if (lensInfo.uuid) {
@@ -72,7 +75,7 @@ async function crawlLenses(lenses, { overwriteBolts = false, overwriteExistingDa
                     continue;
                 }
 
-                const infoFolderPath = path.resolve(`./output/info/${lensInfo.uuid}`);
+                const infoFolderPath = path.resolve(`${infoBasePath}${lensInfo.uuid}`);
                 const infoFilePath = path.join(infoFolderPath, "lens.json");
 
                 await fs.mkdir(infoFolderPath, { recursive: true });
@@ -151,7 +154,7 @@ async function crawlLenses(lenses, { overwriteBolts = false, overwriteExistingDa
 
                 // download and write lens bolt to file and generate a checksum and signature file
                 if (lensInfo.lens_url) {
-                    const boltFolderPath = path.resolve(`./output/bolts/${lensInfo.uuid}`);
+                    const boltFolderPath = path.resolve(`${boltBasePath}${lensInfo.uuid}`);
                     const lensFilePath = path.join(boltFolderPath, "lens.lns");
                     const sha256FilePath = path.join(boltFolderPath, "lens.sha256");
                     const sigFilePath = path.join(boltFolderPath, "lens.sig");
@@ -165,7 +168,7 @@ async function crawlLenses(lenses, { overwriteBolts = false, overwriteExistingDa
 
                     // check if file is does not exist
                     // otherwise overwrite existing file if flag is set
-                    if (!boltFileExists || overwriteBolts) {
+                    if (!boltFileExists || overwriteExistingBolts) {
                         try {
                             // actually download the lens bolt
                             if (await crawler.downloadFile(lensInfo.lens_url, lensFilePath)) {

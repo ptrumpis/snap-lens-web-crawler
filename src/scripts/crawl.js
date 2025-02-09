@@ -3,7 +3,7 @@ import * as Utils from "./utils/functions.js";
 
 const crawler = new SnapLensWebCrawler();
 
-const overwriteBolts = false;
+const overwriteExistingBolts = false;
 const overwriteExistingData = false;
 const saveIncompleteLensInfo = false;
 
@@ -13,7 +13,7 @@ for (const category in crawler.TOP_CATEGORIES) {
     try {
         const topLenses = await crawler.getTopLenses(category, null);
         if (topLenses) {
-            await Utils.crawlLenses(topLenses, { overwriteExistingData, saveIncompleteLensInfo, overwriteBolts });
+            await Utils.crawlLenses(topLenses, { overwriteExistingBolts, overwriteExistingData, saveIncompleteLensInfo });
         }
     } catch (e) {
         console.error(e);
