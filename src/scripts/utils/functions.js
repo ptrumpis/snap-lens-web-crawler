@@ -1,7 +1,7 @@
-import crypto from "crypto";
+import crypto from 'crypto';
 import csv from 'csv-parser';
-import fs from "fs/promises";
-import path from "path";
+import fs from 'fs/promises';
+import path from 'path';
 import { createReadStream } from 'fs';
 import { pipeline } from 'stream/promises';
 import SnapLensWebCrawler from "../../crawler.js";
@@ -9,11 +9,21 @@ import SnapLensWebCrawler from "../../crawler.js";
 const crawler = new SnapLensWebCrawler();
 let resolvedLensCache = new Map();
 
-async function readCSV(filePath, separator = ';') {
+async function detectSeparator(filePath) {
+    const separators = [',', ';', '\t', '|'];
+    const data = await fs.readFile(filePath, 'utf8');
+    const firstLine = data.split('\n')[0];
+
+    return separators.find(sep => firstLine.includes(sep)) || ',';
+}
+
+async function readCSV(filePath) {
+    const separator = await detectSeparator(filePath);
     const results = [];
     await pipeline(
         createReadStream(filePath, { encoding: 'utf8' })
             .pipe(csv({
+                // remove UTF-8 BOM
                 mapHeaders: ({ header, index }) => header.trim().toLowerCase(),
                 separator: separator,
             })),
@@ -34,6 +44,25 @@ async function generateSha256(filePath) {
     return crypto.createHash("sha256").update(data).digest("hex").toUpperCase();
 }
 
+function getLensInfoTemplate() {
+    return Object.assign(crawler._formatLensItem({}), {
+        lens_id: "",
+        lens_url: "",
+        signature: "",
+        sha256: "",
+        last_updated: ""
+    });
+}
+
+function isLensInfoMissing(lensInfo) {
+    const isLensIdMissing = (!lensInfo.unlockable_id);
+    const isLensNameMissing = (!lensInfo.lens_name);
+    const isUserNameMissing = (!lensInfo.user_name && lensInfo.user_display_name !== 'Snapchat');
+    const isCreatorTagsMissing = (lensInfo.lens_creator_search_tags?.length === 0 && lensInfo.has_search_tags !== false);
+
+    return (isLensIdMissing || isLensNameMissing || isUserNameMissing || isCreatorTagsMissing);
+}
+
 async function crawlLenses(lenses, { overwriteBolts = false, overwriteExistingData = false, saveIncompleteLensInfo = false } = {}) {
     for (let lensInfo of lenses) {
         try {
@@ -48,13 +77,13 @@ async function crawlLenses(lenses, { overwriteBolts = false, overwriteExistingDa
                 await fs.mkdir(infoFolderPath, { recursive: true });
 
                 // read existing lens info from file
-                let existingInfo = null;
                 try {
                     const data = await fs.readFile(infoFilePath, "utf8");
-                    existingInfo = JSON.parse(data);
+
+                    const existingInfo = JSON.parse(data);
                     if (existingInfo) {
                         if (overwriteExistingData) {
-                            // update existing data with latest information
+                            // keep latest information and overwrite existing data 
                             lensInfo = crawler.mergeLensItems(lensInfo, existingInfo);
                         } else {
                             // keep existing data and add missing information only
@@ -67,12 +96,9 @@ async function crawlLenses(lenses, { overwriteBolts = false, overwriteExistingDa
                     }
                 }
 
-                const isLensIdMissing = (!lensInfo.unlockable_id);
-                const isUserNameMissing = (!lensInfo.user_name && lensInfo.user_display_name !== 'Snapchat');
-                const isCreatorTagsMissing = (lensInfo.lens_creator_search_tags?.length === 0 && lensInfo.has_search_tags !== false);
-
                 // try to resolve missing information from single page
-                if (isLensIdMissing || isUserNameMissing || isCreatorTagsMissing) {
+                // lens URL's are no longer available
+                if (isLensInfoMissing(lensInfo)) {
                     const liveLensInfo = await crawler.getLensByHash(lensInfo.uuid);
                     if (liveLensInfo) {
                         lensInfo = crawler.mergeLensItems(lensInfo, liveLensInfo);
@@ -84,19 +110,39 @@ async function crawlLenses(lenses, { overwriteBolts = false, overwriteExistingDa
                     }
                 }
 
-                // try to resolve missing urls from archived snapshots
-                if (!lensInfo.lens_url && lensInfo.has_archived_snapshots !== false) {
+                // try to resolve missing URL's from archived snapshots
+                const isLensUrlMissing = (!lensInfo.lens_url && lensInfo.has_archived_snapshots !== false);
+                if (isLensUrlMissing) {
                     const cachedLensInfo = await crawler.getLensByArchivedSnapshot(lensInfo.uuid);
                     if (cachedLensInfo) {
                         lensInfo = crawler.mergeLensItems(lensInfo, cachedLensInfo);
 
                         // mark the existance of archived snapshots (prevent unecessary re-crawl)
-                        if (lensInfo.lens_url) {
+                        if (cachedLensInfo.lens_url) {
                             lensInfo.has_archived_snapshots = true;
                         } else {
                             lensInfo.has_archived_snapshots = false;
                         }
                     }
+                }
+
+                // fix missing lens ID
+                if (!lensInfo.lens_id && lensInfo.unlockable_id) {
+                    lensInfo.lens_id = lensInfo.unlockable_id;
+                }
+
+                // fix missing unlockable ID
+                if (!lensInfo.unlockable_id && lensInfo.lens_id) {
+                    lensInfo.unlockable_id = lensInfo.lens_id;
+                }
+
+                // unlock URL and snapcode URL can be set manually
+                if (!lensInfo.deeplink) {
+                    lensInfo.deeplink = crawler._deeplinkUrl(lensInfo.uuid);
+                }
+
+                if (!lensInfo.snapcode_url) {
+                    lensInfo.snapcode_url = crawler._snapcodeUrl(lensInfo.uuid);
                 }
 
                 // mark lens as resolved for the current crawl iteration since there are no more sources to query
@@ -153,13 +199,13 @@ async function crawlLenses(lenses, { overwriteBolts = false, overwriteExistingDa
                 // write lens info to json file
                 if (lensInfo.lens_url || saveIncompleteLensInfo) {
                     try {
+                        lensInfo = crawler.mergeLensItems(lensInfo, getLensInfoTemplate());
+
                         await fs.writeFile(infoFilePath, JSON.stringify(lensInfo, null, 2), "utf8");
                     } catch (err) {
                         console.error(`Error trying to save ${infoFilePath}:`, err);
                     }
                 }
-
-                // TODO: store uuid, user_name, tags, lens_name for further crawling
             } else {
                 console.warn("Lens UUID is missing.", lensInfo);
             }
