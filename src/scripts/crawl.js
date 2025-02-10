@@ -13,7 +13,7 @@ for (const category in crawler.TOP_CATEGORIES) {
     try {
         const topLenses = await crawler.getTopLenses(category, null);
         if (topLenses) {
-            await Utils.crawlLenses(topLenses, { overwriteExistingBolts, overwriteExistingData, saveIncompleteLensInfo });
+            await Utils.crawlLenses(topLenses, { crawler, overwriteExistingBolts, overwriteExistingData, saveIncompleteLensInfo });
         }
     } catch (e) {
         console.error(e);
