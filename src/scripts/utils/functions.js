@@ -57,6 +57,7 @@ function getLensInfoTemplate() {
     return Object.assign(defaultCrawler._formatLensItem({}), {
         lens_id: "",
         lens_url: "",
+        lens_mirrored: "",
         signature: "",
         sha256: "",
         last_updated: ""
@@ -211,6 +212,7 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                             }
                         }
                     }
+                    lensInfo.lens_mirrored = boltFileExists;
                 } else {
                     // print warning for missing lens urls
                     console.warn("URL missing for lens", lensInfo.uuid);
