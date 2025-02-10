@@ -57,10 +57,10 @@ function getLensInfoTemplate() {
     return Object.assign(defaultCrawler._formatLensItem({}), {
         lens_id: "",
         lens_url: "",
-        lens_mirrored: "",
         signature: "",
         sha256: "",
-        last_updated: ""
+        last_updated: "",
+        is_mirrored: ""
     });
 }
 
@@ -91,17 +91,18 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                 await fs.mkdir(infoFolderPath, { recursive: true });
 
                 // read existing lens info from file
+                let existingLensInfo = {};
                 try {
                     const data = await fs.readFile(infoFilePath, "utf8");
 
-                    const existingInfo = JSON.parse(data);
-                    if (existingInfo) {
+                    existingLensInfo = JSON.parse(data);
+                    if (existingLensInfo) {
                         if (overwriteExistingData) {
                             // keep latest information and overwrite existing data 
-                            lensInfo = crawler.mergeLensItems(lensInfo, existingInfo);
+                            lensInfo = crawler.mergeLensItems(lensInfo, existingLensInfo);
                         } else {
                             // keep existing data and add missing information only
-                            lensInfo = crawler.mergeLensItems(existingInfo, lensInfo);
+                            lensInfo = crawler.mergeLensItems(existingLensInfo, lensInfo);
                         }
                     }
                 } catch (err) {
@@ -212,8 +213,10 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                             }
                         }
                     }
-                    lensInfo.lens_mirrored = boltFileExists;
+                    lensInfo.is_mirrored = boltFileExists;
                 } else {
+                    lensInfo.is_mirrored = false;
+
                     // print warning for missing lens urls
                     console.warn("URL missing for lens", lensInfo.uuid);
                 }
@@ -224,13 +227,15 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                         // use template to create uniform property order
                         lensInfo = crawler.mergeLensItems(lensInfo, getLensInfoTemplate());
 
-                        await fs.writeFile(infoFilePath, JSON.stringify(lensInfo, null, 2), "utf8");
+                        if (JSON.stringify(lensInfo) !== JSON.stringify(existingLensInfo)) {
+                            await fs.writeFile(infoFilePath, JSON.stringify(lensInfo, null, 2), "utf8");
+                        }
                     } catch (err) {
                         console.error(`Error trying to save ${infoFilePath}:`, err);
                     }
                 }
             } else {
-                console.warn("Lens UUID is missing.", lensInfo);
+                console.error("Lens UUID is missing", lensInfo);
             }
         } catch (e) {
             console.error("Error trying to process lens", lensInfo.uuid, e);
