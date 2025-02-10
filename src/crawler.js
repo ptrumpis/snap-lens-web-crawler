@@ -6,8 +6,11 @@ import path from 'path';
 export default class SnapLensWebCrawler {
     SCRIPT_SELECTOR = '#__NEXT_DATA__';
 
+    // snapshots before this date will not work
+    SNAPSHOT_THRESHOLD_MIN = 20211209000000;
+
     // snapshots from 2025 will not work
-    SNAPSHOT_THRESHOLD = 20241231235959;
+    SNAPSHOT_THRESHOLD_MAX = 20241231235959;
 
     // try to get snapshots from 2022-2024
     SNAPSHOT_TIMESTAMP = 20230601;
@@ -281,7 +284,8 @@ export default class SnapLensWebCrawler {
             `https://www.snapchat.com/lens/${hash}?type=SNAPCODE&metadata=01`,
         ];
 
-        let lens = null;
+        let lens = {};
+        let failures = 0;
         try {
             console.log('[Wayback Machine]: Trying to find lens', hash);
 
@@ -298,12 +302,14 @@ export default class SnapLensWebCrawler {
                     const jsonString = await this._loadUrl(apiUrl);
                     if (!jsonString) {
                         // request failed
+                        failures++;
                         continue;
                     }
 
                     jsonObj = JSON.parse(jsonString);
                     if (!jsonObj) {
                         console.warn('Unable to parse JSON string', jsonString);
+                        failures++;
                         continue;
                     }
 
@@ -316,7 +322,11 @@ export default class SnapLensWebCrawler {
                 }
 
                 const snapshotTime = jsonObj.archived_snapshots.closest.timestamp;
-                if (snapshotTime && parseInt(snapshotTime) > this.SNAPSHOT_THRESHOLD) {
+                if (snapshotTime && parseInt(snapshotTime) < this.SNAPSHOT_THRESHOLD_MIN) {
+                    // snapshot is too old and will not contain useful data
+                    continue;
+                }
+                if (snapshotTime && parseInt(snapshotTime) > this.SNAPSHOT_THRESHOLD_MAX) {
                     // snapshot is available but not from 2024 or earlier
                     continue;
                 }
@@ -332,7 +342,7 @@ export default class SnapLensWebCrawler {
                     snapshotLens = this._formatLensItem(snapshotLens, { hash });
 
                     // keep looking for snapshots until we found our precious lens url
-                    lens = this.mergeLensItems(snapshotLens, lens || {});
+                    lens = this.mergeLensItems(snapshotLens, lens);
                     if (lens.lens_url) {
                         lens.from_snapshot = snapshotUrl; // save reference
                         break;
@@ -342,6 +352,8 @@ export default class SnapLensWebCrawler {
         } catch (e) {
             console.error(e);
         }
+
+        lens.archived_snapshot_failures = failures;
 
         return lens;
     }

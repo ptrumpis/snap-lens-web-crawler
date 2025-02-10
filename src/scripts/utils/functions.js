@@ -126,16 +126,17 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                 // try to resolve missing URL's from archived snapshots
                 const isLensUrlMissing = (!lensInfo.lens_url && lensInfo.has_archived_snapshots !== false);
                 if (isLensUrlMissing) {
-                    const cachedLensInfo = await crawler.getLensByArchivedSnapshot(lensInfo.uuid);
-                    if (cachedLensInfo) {
-                        lensInfo = crawler.mergeLensItems(lensInfo, cachedLensInfo);
+                    const archivedLensInfo = await crawler.getLensByArchivedSnapshot(lensInfo.uuid);
+                    if (archivedLensInfo) {
+                        lensInfo = crawler.mergeLensItems(lensInfo, archivedLensInfo);
 
-                        // mark the existance of archived snapshots (prevent unecessary re-crawl)
-                        if (cachedLensInfo.lens_url) {
-                            lensInfo.has_archived_snapshots = true;
-                        } else {
+                        // mark the non-existence of archived snapshots (prevent unecessary re-crawl)
+                        if (!archivedLensInfo.lens_url && archivedLensInfo.archived_snapshot_failures === 0) {
                             lensInfo.has_archived_snapshots = false;
                         }
+
+                        // do not store failures
+                        delete lensInfo.archived_snapshot_failures;
                     }
                 }
 
