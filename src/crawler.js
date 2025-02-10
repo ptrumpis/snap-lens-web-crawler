@@ -39,12 +39,12 @@ export default class SnapLensWebCrawler {
         this.lastRequestTimestamps = new Map();
         this.jsonCache = new Map();
 
-        this.cacheTTL = cacheTTL * 1000;
+        this.cacheTTL = (cacheTTL) ? Math.max(cacheTTL * 1000, 60 * 1000) : 0;
     }
 
     clearCache() {
-        this.jsonCache.clear();
         this.lastRequestTimestamps.clear();
+        this.jsonCache.clear();
     }
 
     async downloadFile(url, dest) {
@@ -111,6 +111,18 @@ export default class SnapLensWebCrawler {
             }
         } catch (e) {
             console.error(e);
+        }
+        return lenses;
+    }
+
+    async getAllLensesByCreator(obfuscatedSlug) {
+        let lenses = [];
+        for (let offset = 0; offset < 1000; offset += 100) {
+            let result = await this.getLensesByCreator(obfuscatedSlug, offset, 100);
+            lenses = lenses.concat(result);
+            if (result.length < 100) {
+                break;
+            }
         }
         return lenses;
     }
