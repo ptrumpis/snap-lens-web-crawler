@@ -6,7 +6,7 @@ import { createReadStream } from 'fs';
 import { pipeline } from 'stream/promises';
 import SnapLensWebCrawler from "../../crawler.js";
 
-const crawler = new SnapLensWebCrawler();
+const defaultCrawler = new SnapLensWebCrawler();
 
 const resolvedLensCache = new Map();
 
@@ -22,25 +22,30 @@ async function detectSeparator(filePath) {
 }
 
 async function readCSV(filePath) {
-    const separator = await detectSeparator(filePath);
-    const results = [];
-    await pipeline(
-        createReadStream(filePath, { encoding: 'utf8' })
-            .pipe(csv({
-                // remove UTF-8 BOM
-                mapHeaders: ({ header, index }) => header.trim().toLowerCase(),
-                separator: separator,
-            })),
-        async function* (source) {
-            for await (const row of source) {
-                const cleanedRow = Object.fromEntries(
-                    Object.entries(row).map(([key, value]) => [key.trim(), value.trim()])
-                );
-                results.push(cleanedRow);
+    const rows = [];
+    try {
+        const separator = await detectSeparator(filePath);
+        await pipeline(
+            createReadStream(filePath, { encoding: 'utf8' })
+                .pipe(csv({
+                    // remove UTF-8 BOM
+                    mapHeaders: ({ header, index }) => header.trim().toLowerCase(),
+                    separator: separator,
+                })),
+            async function* (source) {
+                for await (const row of source) {
+                    const cleanedRow = Object.fromEntries(
+                        Object.entries(row).map(([key, value]) => [key.trim(), value.trim()])
+                    );
+                    rows.push(cleanedRow);
+                }
             }
-        }
-    );
-    return results;
+        );
+    } catch (e) {
+        console.error(e);
+    }
+
+    return rows;
 }
 
 async function generateSha256(filePath) {
@@ -49,7 +54,7 @@ async function generateSha256(filePath) {
 }
 
 function getLensInfoTemplate() {
-    return Object.assign(crawler._formatLensItem({}), {
+    return Object.assign(defaultCrawler._formatLensItem({}), {
         lens_id: "",
         lens_url: "",
         signature: "",
@@ -67,7 +72,11 @@ function isLensInfoMissing(lensInfo) {
     return (isLensIdMissing || isLensNameMissing || isUserNameMissing || isCreatorTagsMissing);
 }
 
-async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteExistingData = false, saveIncompleteLensInfo = false } = {}) {
+async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteExistingData = false, saveIncompleteLensInfo = false, crawler = null } = {}) {
+    if (!(crawler instanceof SnapLensWebCrawler)) {
+        crawler = defaultCrawler;
+    }
+
     for (let lensInfo of lenses) {
         try {
             if (lensInfo.uuid) {
