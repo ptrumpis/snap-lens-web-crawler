@@ -72,7 +72,7 @@ export default class SnapLensWebCrawler {
         function isEmpty(value) {
             return (!value && value !== false) ||
                 (Array.isArray(value) && value.length === 0) ||
-                (typeof value === "object" && value !== null && Object.keys(value).length === 0);
+                (typeof value === 'object' && value !== null && Object.keys(value).length === 0);
         }
 
         let merged = { ...item2, ...item1 };
@@ -132,20 +132,37 @@ export default class SnapLensWebCrawler {
         let lenses = [];
         try {
             const url = `https://lensstudio.snapchat.com/v1/creator/lenses/?limit=${limit}&offset=${offset}&order=1&slug=${obfuscatedSlug}`;
-            const jsonString = await this._loadUrl(url);
-            if (jsonString) {
-                const json = JSON.parse(jsonString);
 
-                if (json && json.lensesList) {
-                    for (let i = 0; i < json.lensesList.length; i++) {
-                        const item = json.lensesList[i];
-                        if (item.lensId && item.deeplinkUrl && item.name && item.creatorName) {
-                            lenses.push(this._formatLensItem(item, { obfuscatedSlug }));
-                        }
-                    }
-                } else {
-                    console.warn('JSON property "lensesList" not found.', json);
+            // use JSON cache to avoid unecessary requests
+            let jsonObj = this._getJsonCache(url);
+
+            if (typeof jsonObj === 'undefined') {
+                console.log('[API Request]:', url);
+
+                const jsonString = await this._loadUrl(url);
+                if (!jsonString) {
+                    // request failed
+                    return lenses;
                 }
+
+                jsonObj = JSON.parse(jsonString);
+                if (!jsonObj) {
+                    console.warn('Unable to parse JSON string', jsonString);
+                    return lenses;
+                }
+
+                this._setJsonCache(url, jsonObj);
+            }
+
+            if (jsonObj.lensesList) {
+                for (let i = 0; i < jsonObj.lensesList.length; i++) {
+                    const item = jsonObj.lensesList[i];
+                    if (item.lensId && item.deeplinkUrl && item.name && item.creatorName) {
+                        lenses.push(this._formatLensItem(item, { obfuscatedSlug }));
+                    }
+                }
+            } else {
+                console.warn('JSON property "lensesList" not found.', jsonObj);
             }
         } catch (e) {
             console.error(e);
@@ -266,23 +283,39 @@ export default class SnapLensWebCrawler {
 
         let lens = null;
         try {
-            for (const index in lensUrls) {
-                console.log('[Wayback Machine]:', lensUrls[index]);
+            console.log('[Wayback Machine]: Trying to find lens', hash);
 
+            for (const index in lensUrls) {
                 // use official API: https://archive.org/help/wayback_api.php
                 const apiUrl = `https://archive.org/wayback/available?url=${encodeURIComponent(lensUrls[index])}&timestamp=${this.SNAPSHOT_TIMESTAMP}`;
-                const jsonString = await this._loadUrl(apiUrl);
-                if (!jsonString) {
-                    continue;
+
+                // use JSON cache to avoid unecessary requests
+                let jsonObj = this._getJsonCache(apiUrl);
+
+                if (typeof jsonObj === 'undefined') {
+                    console.log('[API Request]:', apiUrl);
+
+                    const jsonString = await this._loadUrl(apiUrl);
+                    if (!jsonString) {
+                        // request failed
+                        continue;
+                    }
+
+                    jsonObj = JSON.parse(jsonString);
+                    if (!jsonObj) {
+                        console.warn('Unable to parse JSON string', jsonString);
+                        continue;
+                    }
+
+                    this._setJsonCache(apiUrl, jsonObj);
                 }
 
-                const json = JSON.parse(jsonString);
-                if (!json || !json.archived_snapshots?.closest?.url) {
+                if (!jsonObj.archived_snapshots?.closest?.url) {
                     // no snapshot available
                     continue;
                 }
 
-                const snapshotTime = json.archived_snapshots.closest.timestamp;
+                const snapshotTime = jsonObj.archived_snapshots.closest.timestamp;
                 if (snapshotTime && parseInt(snapshotTime) > this.SNAPSHOT_THRESHOLD) {
                     // snapshot is available but not from 2024 or earlier
                     continue;
@@ -290,14 +323,16 @@ export default class SnapLensWebCrawler {
 
                 console.log('[Found Snapshot]:', lensUrls[index], "-", this._archiveTimestampToDateString(snapshotTime));
 
-                const snapshotUrl = json.archived_snapshots.closest.url;
+                const snapshotUrl = jsonObj.archived_snapshots.closest.url;
                 let snapshotLens = await this._extractLensesFromUrl(snapshotUrl, true, "props.pageProps.lensDisplayInfo");
                 if (snapshotLens) {
-                    // fix lens resource urls since wayback machine does not store them
+                    // fix resource urls since wayback machine does not actually store these files
                     snapshotLens = JSON.parse(this._fixArchiveUrlPrefixes(JSON.stringify(snapshotLens)));
 
+                    snapshotLens = this._formatLensItem(snapshotLens, { hash });
+
                     // keep looking for snapshots until we found our precious lens url
-                    lens = this.mergeLensItems(this._formatLensItem(snapshotLens, { hash }), lens || {});
+                    lens = this.mergeLensItems(snapshotLens, lens || {});
                     if (lens.lens_url) {
                         lens.from_snapshot = snapshotUrl; // save reference
                         break;
@@ -318,23 +353,16 @@ export default class SnapLensWebCrawler {
 
     async _extractLensesFromUrl(url, useCache, ...jsonObjPath) {
         try {
-            if (useCache && this.cacheTTL) {
+            if (useCache) {
                 // use JSON cache to avoid unecessary requests
-                const cacheEntry = this.jsonCache.get(url);
-                if (cacheEntry) {
-                    if ((Date.now() - cacheEntry.timestamp) >= this.cacheTTL) {
-                        // cache TTL expired
-                        this.jsonCache.delete(url);
-                    } else {
-                        console.log('[Read Cache]:', url);
-
-                        // try to get lens object from cached JSON object
-                        const lensObjFromPropertyPath = this._getProperty(cacheEntry.jsonObj, ...jsonObjPath);
-                        if (typeof lensObjFromPropertyPath === 'undefined') {
-                            console.warn('JSON property path not found', jsonObjPath, jsonObj);
-                        }
-                        return lensObjFromPropertyPath; // object|undefined
+                const jsonObj = this._getJsonCache(url);
+                if (typeof jsonObj !== 'undefined') {
+                    // try to get lens object from cached JSON object
+                    const lensObjFromPropertyPath = this._getProperty(jsonObj, ...jsonObjPath);
+                    if (typeof lensObjFromPropertyPath === 'undefined') {
+                        console.warn('JSON property path not found', jsonObjPath, jsonObj);
                     }
+                    return lensObjFromPropertyPath; // object|undefined
                 }
             }
 
@@ -361,14 +389,7 @@ export default class SnapLensWebCrawler {
                 return undefined;
             }
 
-            // store parsed JSON inside cache
-            // to avoid unecessary future requests and parsing
-            if (useCache) {
-                this.jsonCache.set(url, {
-                    jsonObj: jsonObj,
-                    timestamp: Date.now()
-                });
-            }
+            this._setJsonCache(url, jsonObj);
 
             const lensObjFromPropertyPath = this._getProperty(jsonObj, ...jsonObjPath);
             if (typeof lensObjFromPropertyPath === 'undefined') {
@@ -472,6 +493,29 @@ export default class SnapLensWebCrawler {
         return undefined;
     }
 
+    _setJsonCache(url, jsonObj) {
+        this.jsonCache.set(url, {
+            jsonObj: jsonObj,
+            timestamp: Date.now()
+        });
+    }
+
+    _getJsonCache(url) {
+        if (this.cacheTTL) {
+            const cacheEntry = this.jsonCache.get(url);
+            if (cacheEntry) {
+                if ((Date.now() - cacheEntry.timestamp) >= this.cacheTTL) {
+                    // cache TTL expired
+                    this.jsonCache.delete(url);
+                } else {
+                    // return cached object
+                    return cacheEntry.jsonObj;
+                }
+            }
+        }
+        return undefined;
+    }
+
     _formatLensItem(lensItem, options = {}) {
         const { obfuscatedSlug = '', userName = '', hash = '', unlockableId = '' } = options;
 
@@ -548,7 +592,7 @@ export default class SnapLensWebCrawler {
     }
 
     _extractUuidFromDeeplink(deeplink) {
-        if (typeof deeplink === "string" && deeplink && (deeplink.startsWith("https://www.snapchat.com/unlock/?") || deeplink.startsWith("https://snapchat.com/unlock/?"))) {
+        if (typeof deeplink === 'string' && deeplink && (deeplink.startsWith("https://www.snapchat.com/unlock/?") || deeplink.startsWith("https://snapchat.com/unlock/?"))) {
             let deeplinkURL = new URL(deeplink);
             const regexExp = /^[a-f0-9]{32}$/gi;
             if (regexExp.test(deeplinkURL.searchParams.get('uuid'))) {
