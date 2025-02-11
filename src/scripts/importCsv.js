@@ -16,7 +16,7 @@ if (!inputFile) {
 
 try {
     const entries = await Utils.readCSV(inputFile);
-    if (entries) {
+    if (entries && entries.length) {
 
         // pass entries with UUID directly
         const lenses = entries.filter((entry) => (entry.uuid));
@@ -42,9 +42,10 @@ try {
                     console.log(`[Select]: Creator slug (${n}/${slugEntries.length}) - ${creatorSlug}`);
 
                     const creatorLenses = await crawler.getAllLensesByCreator(creatorSlug);
-
-                    console.log(`[Import]: ${creatorLenses.length} Lenses by Creator - ${creatorSlug}`);
-                    await Utils.crawlLenses(creatorLenses, { crawler, overwriteExistingBolts, overwriteExistingData, saveIncompleteLensInfo });
+                    if (creatorLenses && creatorLenses.length) {
+                        console.log(`[Import]: ${creatorLenses.length} Lenses by Creator (${n}/${slugEntries.length}) - ${creatorSlug}`);
+                        await Utils.crawlLenses(creatorLenses, { crawler, overwriteExistingBolts, overwriteExistingData, saveIncompleteLensInfo });
+                    }
                 } catch (e) {
                     console.error(e);
                 }
