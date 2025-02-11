@@ -363,6 +363,11 @@ export default class SnapLensWebCrawler {
         return null;
     }
 
+    async getLensesFromUrl(url) {
+        // TODO: implement
+        return null;
+    }
+
     async _extractLensesFromUrl(url, useCache, ...jsonObjPath) {
         try {
             if (useCache) {

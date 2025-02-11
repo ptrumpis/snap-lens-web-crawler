@@ -48,6 +48,11 @@ async function readCSV(filePath) {
     return rows;
 }
 
+async function readTextFile(filePath) {
+    const data = await fs.readFile(filePath, 'utf8');
+    return data.split(/\r?\n/).filter(line => line.trim() !== '');
+}
+
 async function generateSha256(filePath) {
     const data = await fs.readFile(filePath);
     return crypto.createHash("sha256").update(data).digest("hex").toUpperCase();
@@ -243,4 +248,4 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
     }
 }
 
-export { readCSV, crawlLenses };
+export { readCSV, readTextFile, crawlLenses };
