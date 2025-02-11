@@ -7,7 +7,7 @@ export default class SnapLensWebCrawler {
     SCRIPT_SELECTOR = '#__NEXT_DATA__';
 
     // snapshots before this date will not work
-    SNAPSHOT_THRESHOLD_MIN = 20211209000000;
+    SNAPSHOT_THRESHOLD_MIN = 20220101000000;
 
     // snapshots from 2025 will not work
     SNAPSHOT_THRESHOLD_MAX = 20241231235959;
