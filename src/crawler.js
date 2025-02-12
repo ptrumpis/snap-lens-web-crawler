@@ -279,9 +279,8 @@ export default class SnapLensWebCrawler {
     async getLensByArchivedSnapshot(hash) {
         const lensUrls = [
             // ordered by highest chance of success
-            `https://lens.snapchat.com/${hash}`,
-            `https://www.snapchat.com/lens/${hash}`,
-            `https://www.snapchat.com/lens/${hash}?type=SNAPCODE&metadata=01`,
+            `lens.snapchat.com/${hash}*`,    // very likely
+            `snapchat.com/lens/${hash}*`,    // possibly
         ];
 
         let lens = {};
