@@ -140,7 +140,7 @@ export default class SnapLensWebCrawler {
             let jsonObj = this._getJsonCache(url);
 
             if (typeof jsonObj === 'undefined') {
-                console.log('[API Request]:', url);
+                console.log(`[API Request]: ${url}`);
 
                 const jsonString = await this._loadUrl(url);
                 if (!jsonString) {
@@ -150,7 +150,7 @@ export default class SnapLensWebCrawler {
 
                 jsonObj = JSON.parse(jsonString);
                 if (!jsonObj) {
-                    console.warn('Unable to parse JSON string', jsonString);
+                    console.warn(`Unable to parse JSON string:`, jsonString);
                     return lenses;
                 }
 
@@ -165,7 +165,7 @@ export default class SnapLensWebCrawler {
                     }
                 }
             } else {
-                console.warn('JSON property "lensesList" not found.', jsonObj);
+                console.warn(`JSON property "lensesList" not found`, jsonObj);
             }
         } catch (e) {
             console.error(e);
@@ -239,7 +239,7 @@ export default class SnapLensWebCrawler {
         let lenses = [];
         try {
             if (!this.TOP_CATEGORIES[category]) {
-                console.error('Unknown top lens category: ', category, "\nValid top lens categories are:", Object.getOwnPropertyNames(this.TOP_CATEGORIES));
+                console.error(`Unknown top lens category: ${category} \nValid top lens categories are:`, Object.getOwnPropertyNames(this.TOP_CATEGORIES));
                 return null;
             }
 
@@ -252,7 +252,7 @@ export default class SnapLensWebCrawler {
             do {
                 let url = categoryBaseUrl;
                 if (hasMore && cursorId) {
-                    url = categoryBaseUrl + "?cursor_id=" + cursorId;
+                    url = categoryBaseUrl + '?cursor_id=' + cursorId;
                 }
 
                 const pageProps = await this._extractLensesFromUrl(url, false, "props.pageProps");
@@ -286,7 +286,7 @@ export default class SnapLensWebCrawler {
         let lens = {};
         let failures = 0;
         try {
-            console.log('[Wayback Machine]: Trying to find lens', hash);
+            console.log(`[Wayback Machine]: Trying to find lens: ${hash}`);
 
             for (const index in lensUrls) {
                 // use official API: https://archive.org/help/wayback_api.php
@@ -296,7 +296,7 @@ export default class SnapLensWebCrawler {
                 let jsonObj = this._getJsonCache(apiUrl);
 
                 if (typeof jsonObj === 'undefined') {
-                    console.log('[API Request]:', apiUrl);
+                    console.log(`[API Request]: ${apiUrl}`);
 
                     const jsonString = await this._loadUrl(apiUrl);
                     if (!jsonString) {
@@ -307,7 +307,7 @@ export default class SnapLensWebCrawler {
 
                     jsonObj = JSON.parse(jsonString);
                     if (!jsonObj) {
-                        console.warn('Unable to parse JSON string', jsonString);
+                        console.warn(`Unable to parse JSON string:`, jsonString);
                         failures++;
                         continue;
                     }
@@ -330,7 +330,7 @@ export default class SnapLensWebCrawler {
                     continue;
                 }
 
-                console.log('[Found Snapshot]:', lensUrls[index], "-", this._archiveTimestampToDateString(snapshotTime));
+                console.log(`[Found Snapshot]: ${lensUrls[index]} - ${this._archiveTimestampToDateString(snapshotTime)}`);
 
                 const snapshotUrl = jsonObj.archived_snapshots.closest.url;
                 let snapshotLens = await this._extractLensesFromUrl(snapshotUrl, true, "props.pageProps.lensDisplayInfo");
@@ -376,13 +376,13 @@ export default class SnapLensWebCrawler {
                     // try to get lens object from cached JSON object
                     const lensObjFromPropertyPath = this._getProperty(jsonObj, ...jsonObjPath);
                     if (typeof lensObjFromPropertyPath === 'undefined') {
-                        console.warn('JSON property path not found', jsonObjPath, jsonObj);
+                        console.warn(`JSON property path not found: ${jsonObjPath}`, jsonObj);
                     }
                     return lensObjFromPropertyPath; // object|undefined
                 }
             }
 
-            console.log('[Crawling]:', url);
+            console.log(`[Crawling]: ${url}`);
 
             const body = await this._loadUrl(url);
             if (typeof body !== 'string' || !body) {
@@ -395,13 +395,13 @@ export default class SnapLensWebCrawler {
             // extract lens info from script tag
             const jsonString = $(this.SCRIPT_SELECTOR).text();
             if (typeof jsonString !== 'string' || !jsonString) {
-                console.warn('Unable to read script tag', this.SCRIPT_SELECTOR);
+                console.warn(`Unable to read script tag: ${this.SCRIPT_SELECTOR}`);
                 return undefined;
             }
 
             const jsonObj = JSON.parse(jsonString);
             if (!jsonObj) {
-                console.warn('Unable to parse JSON string', jsonString);
+                console.warn(`Unable to parse JSON string:`, jsonString);
                 return undefined;
             }
 
@@ -409,11 +409,11 @@ export default class SnapLensWebCrawler {
 
             const lensObjFromPropertyPath = this._getProperty(jsonObj, ...jsonObjPath);
             if (typeof lensObjFromPropertyPath === 'undefined') {
-                console.warn('JSON property path not found', jsonObjPath, jsonObj);
+                console.warn(`JSON property path not found: ${jsonObjPath}`, jsonObj);
             }
             return lensObjFromPropertyPath; // object|undefined
         } catch (e) {
-            console.error('Error extracting lenses from URL:', url, e);
+            console.error(`Error extracting lenses from URL: ${url}`, e);
         }
 
         return undefined;
@@ -490,11 +490,11 @@ export default class SnapLensWebCrawler {
                 return response;
             } catch (e) {
                 if (e.name === 'ResponseStatus') {
-                    console.error(`[Failed] (${attempt}/${maxAttempts}):`, url, "-", e.message);
+                    console.error(`[Failed] (${attempt}/${maxAttempts}): ${url} - ${e.message}`);
                 } else if (e.name === 'AbortError') {
-                    console.error(`[Timeout] (${attempt}/${maxAttempts}):`, url);
+                    console.error(`[Timeout] (${attempt}/${maxAttempts}): ${url}`);
                 } else {
-                    console.error(`[Error] (${attempt}/${maxAttempts}):`, url, e);
+                    console.error(`[Error] (${attempt}/${maxAttempts}): ${url}`, e);
                 }
             } finally {
                 clearTimeout(timeout);
@@ -588,21 +588,21 @@ export default class SnapLensWebCrawler {
 
     _profileUrl(username) {
         if (typeof username === 'string' && username) {
-            return "https://www.snapchat.com/add/" + username;
+            return `https://www.snapchat.com/add/${username}`;
         }
         return '';
     }
 
     _snapcodeUrl(uuid) {
         if (typeof uuid === 'string' && uuid) {
-            return "https://app.snapchat.com/web/deeplink/snapcode?data=" + uuid + "&version=1&type=png";
+            return `https://app.snapchat.com/web/deeplink/snapcode?data=${uuid}&version=1&type=png`;
         }
         return '';
     }
 
     _deeplinkUrl(uuid) {
         if (typeof uuid === 'string' && uuid) {
-            return "'https://snapchat.com/unlock/?type=SNAPCODE&uuid=" + uuid + "&metadata=01";
+            return `https://snapchat.com/unlock/?type=SNAPCODE&uuid=${uuid}&metadata=01`;
         }
         return '';
     }
