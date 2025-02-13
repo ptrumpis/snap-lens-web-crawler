@@ -11,7 +11,7 @@ for (const category in crawler.TOP_CATEGORIES) {
     console.log(`[Fetching]: Top Lens Category: ${category.toUpperCase()}`);
 
     try {
-        const topLenses = await crawler.getTopLenses(category, null);
+        const topLenses = await crawler.getTopLensesByCategory(category, null);
         if (topLenses && topLenses.length) {
             console.log(`[Resolving]: ${topLenses.length} Lenses from Category: ${category.toUpperCase()}`);
 

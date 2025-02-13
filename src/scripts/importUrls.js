@@ -22,7 +22,7 @@ try {
         const urls = lines.filter(line => urlRegex.test(line));
 
         if (urls && urls.length) {
-            console.log(`[URL]: Importing ${urls.length} URL's from text file: '${inputFile}'`);
+            console.log(`[Import URL]: Importing ${urls.length} URL's from text file: '${inputFile}'`);
 
             for (const index in urls) {
                 const url = urls[index];
@@ -31,7 +31,7 @@ try {
                 try {
                     console.log(`[Fetching]: URL (${n}/${urls.length}): ${url}`);
 
-                    const lenses = await crawler.getLensesFromUrl(url);
+                    const lenses = await crawler.getAllLensesFromUrl(url);
                     if (lenses && lenses.length) {
                         console.log(`[Resolving]: ${lenses.length} Lenses from URL: ${url}`);
 

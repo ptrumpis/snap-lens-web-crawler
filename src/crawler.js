@@ -51,7 +51,7 @@ export default class SnapLensWebCrawler {
     }
 
     async downloadFile(url, dest) {
-        console.log(`[Downloading]: ${url}`);
+        console.log(`[Downloading] ${url}`);
 
         try {
             const response = await this._requestGently(url, 'GET');
@@ -62,7 +62,7 @@ export default class SnapLensWebCrawler {
 
                 return true;
             } else if (response?.status) {
-                console.error(`[Download Error]: ${url} - Unexpected HTTP Status ${response.status}`);
+                console.error(`[Download Error] ${url} - Unexpected HTTP Status ${response.status}`);
             }
         } catch (e) {
             console.error(e);
@@ -89,37 +89,83 @@ export default class SnapLensWebCrawler {
         return merged;
     }
 
-    async getLensByHash(hash) {
-        try {
-            const url = `https://lens.snapchat.com/${hash}`;
-            const lens = await this._extractLensesFromUrl(url, true, "props.pageProps.lensDisplayInfo");
-            if (lens) {
-                return this._formatLensItem(lens, { hash });
-            }
-        } catch (e) {
-            console.error(e);
+    async getTopLensesByCategory(category = 'default', maxLenses = 100) {
+        if (!this.TOP_CATEGORIES[category]) {
+            console.error(`Unknown top lens category: ${category} \nValid top lens categories are:`, Object.getOwnPropertyNames(this.TOP_CATEGORIES));
+            return null;
         }
-        return null;
+
+        const categoryBaseUrl = `https://www.snapchat.com/lens${this.TOP_CATEGORIES[category]}`;
+        return await this._getTopLenses(categoryBaseUrl, maxLenses);
+    }
+
+    async getLensesByUsername(userName) {
+        const url = `https://www.snapchat.com/add/${userName}`;
+        return await this._getUserLenses(url, { userName });
+    }
+
+    async getLensByHash(hash) {
+        const url = `https://lens.snapchat.com/${hash}`;
+        return await this._getSingleLens(url, { hash });
     }
 
     async getMoreLensesByHash(hash) {
-        let lenses = [];
+        const url = `https://lens.snapchat.com/${hash}`;
+        return await this._getMoreLenses(url, { hash })
+    }
+
+    async getLensByArchivedSnapshot(hash) {
+        const lensUrls = [
+            // ordered by highest chance of success
+            `lens.snapchat.com/${hash}*`,   // very likely
+            `snapchat.com/lens/${hash}*`,   // possibly
+        ];
+
+        let lens = {};
+        let failures = 0;
         try {
-            const url = `https://lens.snapchat.com/${hash}`;
-            const results = await this._extractLensesFromUrl(url, true, "props.pageProps.moreLenses");
-            if (results) {
-                for (const index in results) {
-                    lenses.push(this._formatLensItem(results[index], { hash }));
+            console.log(`[Wayback Machine] Trying to find lens: ${hash}`);
+
+            for (const index in lensUrls) {
+                const targetUrl = lensUrls[index];
+
+                const snapshot = await this._queryArchivedSnapshot(targetUrl);
+                if (typeof snapshot === 'undefined') {
+                    // request failed or json error
+                    failures++;
+                    continue;
+                } else if (typeof snapshot !== 'object' || Object.keys(snapshot).length !== 2) {
+                    // snapshot does not exist or does not match criteria
+                    continue;
+                }
+
+                console.log(`[Found Snapshot] ${targetUrl} - ${snapshot.date}`);
+
+                let snapshotLens = await this._getSingleLens(snapshot.url, { hash });
+                if (snapshotLens) {
+                    // fix resource urls since wayback machine does not actually store lens files
+                    snapshotLens = JSON.parse(this._fixArchiveUrlPrefixes(JSON.stringify(snapshotLens)));
+
+                    // keep looking for snapshots until we found our precious lens url
+                    lens = this.mergeLensItems(snapshotLens, lens);
+                    if (lens.lens_url) {
+                        lens.from_snapshot = snapshot.url; // save reference
+                        break;
+                    }
                 }
             }
         } catch (e) {
             console.error(e);
         }
-        return lenses;
+
+        lens.archived_snapshot_failures = failures;
+
+        return lens;
     }
 
     async getAllLensesByCreator(obfuscatedSlug) {
         let lenses = [];
+
         for (let offset = 0; offset < 1000; offset += 100) {
             let result = await this.getLensesByCreator(obfuscatedSlug, offset, 100);
             lenses = lenses.concat(result);
@@ -127,58 +173,40 @@ export default class SnapLensWebCrawler {
                 break;
             }
         }
+
         return lenses;
     }
 
     async getLensesByCreator(obfuscatedSlug, offset = 0, limit = 100) {
         limit = Math.min(100, limit);
+
+        const url = `https://lensstudio.snapchat.com/v1/creator/lenses/?limit=${limit}&offset=${offset}&order=1&slug=${obfuscatedSlug}`;
+
         let lenses = [];
         try {
-            const url = `https://lensstudio.snapchat.com/v1/creator/lenses/?limit=${limit}&offset=${offset}&order=1&slug=${obfuscatedSlug}`;
-
-            // use JSON cache to avoid unecessary requests
-            let jsonObj = this._getJsonCache(url);
-
-            if (typeof jsonObj === 'undefined') {
-                console.log(`[API Request]: ${url}`);
-
-                const jsonString = await this._loadUrl(url);
-                if (!jsonString) {
-                    // request failed
-                    return lenses;
-                }
-
-                jsonObj = JSON.parse(jsonString);
-                if (!jsonObj) {
-                    console.warn(`Unable to parse JSON string:`, jsonString);
-                    return lenses;
-                }
-
-                this._setJsonCache(url, jsonObj);
-            }
-
-            if (jsonObj.lensesList) {
-                for (let i = 0; i < jsonObj.lensesList.length; i++) {
-                    const item = jsonObj.lensesList[i];
+            const lensesList = await this._getJsonFromUrl(url, "lensesList");
+            if (lensesList) {
+                for (let i = 0; i < lensesList.length; i++) {
+                    const item = lensesList[i];
                     if (item.lensId && item.deeplinkUrl && item.name && item.creatorName) {
                         lenses.push(this._formatLensItem(item, { obfuscatedSlug }));
                     }
                 }
-            } else {
-                console.warn(`JSON property "lensesList" not found`, jsonObj);
             }
         } catch (e) {
             console.error(e);
         }
+
         return lenses;
     }
 
     async searchLenses(search) {
         const slug = search.replace(/\W+/g, '-');
+
         let lenses = [];
         try {
             const url = `https://www.snapchat.com/explore/${slug}`;
-            const results = await this._extractLensesFromUrl(url, false, "props.pageProps.initialApolloState", "props.pageProps.encodedSearchResponse");
+            const results = await this._crawlJsonFromUrl(url, "props.pageProps.initialApolloState", "props.pageProps.encodedSearchResponse");
             if (results) {
                 if (typeof results === 'object') {
                     // original data structure
@@ -216,173 +244,138 @@ export default class SnapLensWebCrawler {
         } catch (e) {
             console.error(e);
         }
+
         return lenses;
     }
 
-    async getUserProfileLenses(userName) {
-        let lenses = [];
+    async getAllLensesFromUrl(url) {
+        // TODO: implement
+        return null;
+    }
+
+    async _getSingleLens(url, lensDefaults = {}) {
         try {
-            const url = `https://www.snapchat.com/add/${userName}`;
-            const results = await this._extractLensesFromUrl(url, false, "props.pageProps.lenses");
+            const lens = await this._crawlJsonFromUrl(url, "props.pageProps.lensDisplayInfo");
+            if (lens) {
+                return this._formatLensItem(lens, lensDefaults);
+            }
+        } catch (e) {
+            console.error(e);
+        }
+
+        return null;
+    }
+
+    async _getMoreLenses(url, lensDefaults = {}) {
+        let lenses = [];
+
+        try {
+            const results = await this._crawlJsonFromUrl(url, "props.pageProps.moreLenses");
             if (results) {
                 for (const index in results) {
-                    lenses.push(this._formatLensItem(results[index], { userName }));
+                    lenses.push(this._formatLensItem(results[index], lensDefaults));
                 }
             }
         } catch (e) {
             console.error(e);
         }
+
         return lenses;
     }
 
-    async getTopLenses(category = 'default', maxLenses = 100) {
+    async _getUserLenses(url, lensDefaults = {}) {
         let lenses = [];
+
         try {
-            if (!this.TOP_CATEGORIES[category]) {
-                console.error(`Unknown top lens category: ${category} \nValid top lens categories are:`, Object.getOwnPropertyNames(this.TOP_CATEGORIES));
-                return null;
+            const results = await this._crawlJsonFromUrl(url, "props.pageProps.lenses");
+            if (results) {
+                for (const index in results) {
+                    lenses.push(this._formatLensItem(results[index], lensDefaults));
+                }
             }
+        } catch (e) {
+            console.error(e);
+        }
 
-            const categoryPath = this.TOP_CATEGORIES[category];
-            const categoryBaseUrl = `https://www.snapchat.com/lens${categoryPath}`;
+        return lenses;
+    }
 
+    async _getTopLenses(url, maxLenses = 100, lensDefaults = {}) {
+        let lenses = [];
+
+        try {
             // loop through all "load more lenses" pages identified by a cursor ID
             let hasMore = false;
-            let cursorId = '';
+            let nextCursorId = '';
+
+            const currentUrl = new URL(url);
             do {
-                let url = categoryBaseUrl;
-                if (hasMore && cursorId) {
-                    url = categoryBaseUrl + '?cursor_id=' + cursorId;
+                if (hasMore && nextCursorId) {
+                    currentUrl.searchParams.set('cursor_id', nextCursorId);
                 }
 
-                const pageProps = await this._extractLensesFromUrl(url, false, "props.pageProps");
+                const pageProps = await this._crawlJsonFromUrl(currentUrl.toString(), "props.pageProps");
                 if (pageProps?.topLenses) {
                     const results = pageProps.topLenses;
                     for (const index in results) {
                         if (maxLenses && lenses.length >= maxLenses) {
                             break;
                         }
-                        lenses.push(this._formatLensItem(results[index]));
+                        lenses.push(this._formatLensItem(results[index], lensDefaults));
                     }
                 }
 
                 // more pages to load are identified by next cursor ID and a boolean flag 
                 hasMore = pageProps?.hasMore || false;
-                cursorId = pageProps?.nextCursorId || '';
-            } while (hasMore && cursorId && !(maxLenses && lenses.length >= maxLenses));
+                nextCursorId = pageProps?.nextCursorId || '';
+            } while (hasMore && nextCursorId && !(maxLenses && lenses.length >= maxLenses));
         } catch (e) {
             console.error(e);
         }
+
         return lenses;
     }
 
-    async getLensByArchivedSnapshot(hash) {
-        const lensUrls = [
-            // ordered by highest chance of success
-            `lens.snapchat.com/${hash}*`,    // very likely
-            `snapchat.com/lens/${hash}*`,    // possibly
-        ];
+    async _queryArchivedSnapshot(url) {
+        // use official API: https://archive.org/help/wayback_api.php
+        const apiUrl = `https://archive.org/wayback/available?timestamp=${this.SNAPSHOT_TIMESTAMP}&url=${encodeURIComponent(url)}`;
 
-        let lens = {};
-        let failures = 0;
-        try {
-            console.log(`[Wayback Machine]: Trying to find lens: ${hash}`);
-
-            for (const index in lensUrls) {
-                // use official API: https://archive.org/help/wayback_api.php
-                const apiUrl = `https://archive.org/wayback/available?url=${encodeURIComponent(lensUrls[index])}&timestamp=${this.SNAPSHOT_TIMESTAMP}`;
-
-                // use JSON cache to avoid unecessary requests
-                let jsonObj = this._getJsonCache(apiUrl);
-
-                if (typeof jsonObj === 'undefined') {
-                    console.log(`[API Request]: ${apiUrl}`);
-
-                    const jsonString = await this._loadUrl(apiUrl);
-                    if (!jsonString) {
-                        // request failed
-                        failures++;
-                        continue;
-                    }
-
-                    jsonObj = JSON.parse(jsonString);
-                    if (!jsonObj) {
-                        console.warn(`Unable to parse JSON string:`, jsonString);
-                        failures++;
-                        continue;
-                    }
-
-                    this._setJsonCache(apiUrl, jsonObj);
-                }
-
-                if (!jsonObj.archived_snapshots?.closest?.url) {
-                    // no snapshot available
-                    continue;
-                }
-
-                const snapshotTime = jsonObj.archived_snapshots.closest.timestamp;
-                if (snapshotTime && parseInt(snapshotTime) < this.SNAPSHOT_THRESHOLD_MIN) {
-                    // snapshot is too old and will not contain useful data
-                    continue;
-                }
-                if (snapshotTime && parseInt(snapshotTime) > this.SNAPSHOT_THRESHOLD_MAX) {
-                    // snapshot is available but not from 2024 or earlier
-                    continue;
-                }
-
-                console.log(`[Found Snapshot]: ${lensUrls[index]} - ${this._archiveTimestampToDateString(snapshotTime)}`);
-
-                const snapshotUrl = jsonObj.archived_snapshots.closest.url;
-                let snapshotLens = await this._extractLensesFromUrl(snapshotUrl, true, "props.pageProps.lensDisplayInfo");
-                if (snapshotLens) {
-                    // fix resource urls since wayback machine does not actually store these files
-                    snapshotLens = JSON.parse(this._fixArchiveUrlPrefixes(JSON.stringify(snapshotLens)));
-
-                    snapshotLens = this._formatLensItem(snapshotLens, { hash });
-
-                    // keep looking for snapshots until we found our precious lens url
-                    lens = this.mergeLensItems(snapshotLens, lens);
-                    if (lens.lens_url) {
-                        lens.from_snapshot = snapshotUrl; // save reference
-                        break;
+        const snaphot = await this._getJsonFromUrl(apiUrl, "archived_snapshots");
+        if (snaphot) {
+            if (snaphot.closest?.url && snaphot.closest?.timestamp) {
+                const snapshotTime = (snaphot.closest.timestamp) ? parseInt(snaphot.closest.timestamp) : 0;
+                if (snapshotTime && snapshotTime >= this.SNAPSHOT_THRESHOLD_MIN && snapshotTime <= this.SNAPSHOT_THRESHOLD_MAX) {
+                    try {
+                        const snapshotUrl = new URL(snaphot.closest.url);
+                        return {
+                            url: snapshotUrl.toString(),
+                            date: this._archiveTimestampToDateString(snapshotTime)
+                        };
+                    } catch (e) {
+                        // invalid url
+                        console.error(`[Error] Invalid Snapshot URL: ${url} - ${e.message}`);
+                        return undefined;
                     }
                 }
+                // snapshot exists but does not match criteria
+                return true;
             }
-        } catch (e) {
-            console.error(e);
+            // snapshot does not exist
+            return false;
         }
-
-        lens.archived_snapshot_failures = failures;
-
-        return lens;
+        // request failed or json error
+        return undefined;
     }
 
-    async getMoreLensesByArchivedSnapshot(hash) {
-        // TODO: implement
-        return null;
-    }
-
-    async getLensesFromUrl(url) {
-        // TODO: implement
-        return null;
-    }
-
-    async _extractLensesFromUrl(url, useCache, ...jsonObjPath) {
+    async _crawlJsonFromUrl(url, ...jsonObjPath) {
         try {
-            if (useCache) {
-                // use JSON cache to avoid unecessary requests
-                const jsonObj = this._getJsonCache(url);
-                if (typeof jsonObj !== 'undefined') {
-                    // try to get lens object from cached JSON object
-                    const lensObjFromPropertyPath = this._getProperty(jsonObj, ...jsonObjPath);
-                    if (typeof lensObjFromPropertyPath === 'undefined') {
-                        console.warn(`JSON property path not found: ${jsonObjPath}`, jsonObj);
-                    }
-                    return lensObjFromPropertyPath; // object|undefined
-                }
+            // use JSON cache to avoid unecessary requests
+            const jsonObj = this._getJsonCache(url);
+            if (typeof jsonObj !== 'undefined') {
+                return this._getProperty(jsonObj, ...jsonObjPath);
             }
 
-            console.log(`[Crawling]: ${url}`);
+            console.log(`[Crawling] ${url}`);
 
             const body = await this._loadUrl(url);
             if (typeof body !== 'string' || !body) {
@@ -395,25 +388,67 @@ export default class SnapLensWebCrawler {
             // extract lens info from script tag
             const jsonString = $(this.SCRIPT_SELECTOR).text();
             if (typeof jsonString !== 'string' || !jsonString) {
-                console.warn(`Unable to read script tag: ${this.SCRIPT_SELECTOR}`);
+                console.error(`[Crawl Error] ${url} - Unable to read script tag: ${this.SCRIPT_SELECTOR}`);
                 return undefined;
             }
 
-            const jsonObj = JSON.parse(jsonString);
-            if (!jsonObj) {
-                console.warn(`Unable to parse JSON string:`, jsonString);
-                return undefined;
-            }
+            try {
+                const jsonObj = JSON.parse(jsonString);
+                if (jsonObj) {
+                    this._setJsonCache(url, jsonObj);
+                }
 
-            this._setJsonCache(url, jsonObj);
-
-            const lensObjFromPropertyPath = this._getProperty(jsonObj, ...jsonObjPath);
-            if (typeof lensObjFromPropertyPath === 'undefined') {
-                console.warn(`JSON property path not found: ${jsonObjPath}`, jsonObj);
+                return this._getProperty(jsonObj, ...jsonObjPath);
+            } catch (e) {
+                if (e.name === 'SyntaxError') {
+                    // JSON parse error
+                    console.error(`[JSON Error] ${url} - ${e.message}`);
+                } else {
+                    // unexpected error
+                    console.error(`[Error] ${url}`, e);
+                }
             }
-            return lensObjFromPropertyPath; // object|undefined
         } catch (e) {
-            console.error(`Error extracting lenses from URL: ${url}`, e);
+            console.error(e);
+        }
+
+        return undefined;
+    }
+
+    async _getJsonFromUrl(url, ...jsonObjPath) {
+        // use JSON cache to avoid unecessary requests
+        const jsonObj = this._getJsonCache(url);
+        if (typeof jsonObj !== 'undefined') {
+            return this._getProperty(jsonObj, ...jsonObjPath);
+        }
+
+        try {
+            console.log(`[API Request] ${url}`);
+
+            const jsonString = await this._loadUrl(url);
+            if (typeof jsonString !== 'string' || !jsonString) {
+                // request failed
+                return undefined;
+            }
+
+            try {
+                const jsonObj = JSON.parse(jsonString);
+                if (jsonObj) {
+                    this._setJsonCache(url, jsonObj);
+                }
+
+                return this._getProperty(jsonObj, ...jsonObjPath);
+            } catch (e) {
+                if (e.name === 'SyntaxError') {
+                    // JSON parse error
+                    console.error(`[JSON Error] ${url} - ${e.message}`);
+                } else {
+                    // unexpected error
+                    console.error(`[Error] ${url}`, e);
+                }
+            }
+        } catch (e) {
+            console.error(e);
         }
 
         return undefined;
@@ -422,12 +457,13 @@ export default class SnapLensWebCrawler {
     async _loadUrl(url) {
         try {
             const response = await this._requestGently(url, 'GET');
-            if (response && response.ok) {
+            if (response?.ok) {
                 return await response.text();
             }
         } catch (e) {
             console.error(e);
         }
+
         return undefined;
     }
 
@@ -462,8 +498,8 @@ export default class SnapLensWebCrawler {
         try {
             hostname = new URL(url).hostname;
         } catch (e) {
-            // invalid url
-            console.error(e);
+            // invalid url given
+            console.error(`[Error] Invalid URL: ${url} - ${e.message}`);
             return undefined;
         }
 
@@ -474,13 +510,13 @@ export default class SnapLensWebCrawler {
             }, this.connectionTimeoutMs);
 
             try {
-                // update last request time
+                // update last request time to keep track of last request
                 this.lastRequestTimestamps.set(hostname, Date.now());
 
                 const response = await fetch(url, { method: method, signal: controller.signal, headers: this.headers });
                 clearTimeout(timeout);
 
-                // trigger retry 
+                // trigger retry
                 if (response.status >= 400 && response.status < 600) {
                     const statusError = new Error(`HTTP Status ${response.status}`);
                     statusError.name = 'ResponseStatus';
@@ -494,7 +530,7 @@ export default class SnapLensWebCrawler {
                 } else if (e.name === 'AbortError') {
                     console.error(`[Timeout] (${attempt}/${maxAttempts}): ${url}`);
                 } else {
-                    console.error(`[Error] (${attempt}/${maxAttempts}): ${url}`, e);
+                    console.error(`[Error] (${attempt}/${maxAttempts}): ${url} - ${e.message}`);
                 }
             } finally {
                 clearTimeout(timeout);
@@ -524,11 +560,11 @@ export default class SnapLensWebCrawler {
                     // cache TTL expired
                     this.jsonCache.delete(url);
                 } else {
-                    // return cached object
                     return cacheEntry.jsonObj;
                 }
             }
         }
+
         return undefined;
     }
 
@@ -621,13 +657,14 @@ export default class SnapLensWebCrawler {
     _archiveTimestampToDateString(YYYYMMDDhhmmss) {
         try {
             if (YYYYMMDDhhmmss) {
-                return new Date(YYYYMMDDhhmmss.replace(
+                return new Date(`${YYYYMMDDhhmmss}`.replace(
                     /^(\d{4})(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)$/,
                     '$4:$5:$6 $2/$3/$1'
                 )).toDateString();
             }
         } catch (e) {
         }
+
         return 'Invalid Date';
     }
 
@@ -637,7 +674,10 @@ export default class SnapLensWebCrawler {
     }
 
     _getProperty(obj, ...selectors) {
-        if (!obj) return null;
+        if (typeof obj !== 'object' || !obj || Object.keys(obj).length === 0) {
+            console.error(`[Parse Error] Invalid object given:`, obj);
+            return undefined;
+        }
 
         for (const selector of selectors) {
             const value = selector
@@ -646,8 +686,12 @@ export default class SnapLensWebCrawler {
                 .filter((t) => t !== "")
                 .reduce((prev, cur) => prev?.[cur], obj);
 
-            if (value !== undefined) return value;
+            if (value !== undefined) {
+                return value;
+            }
         }
+
+        console.error(`[Parse Error] Property path(s) not found: '${selectors.toString}'`, obj);
 
         return undefined;
     }
