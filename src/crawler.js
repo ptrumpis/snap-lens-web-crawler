@@ -310,7 +310,7 @@ export default class SnapLensWebCrawler {
         return lenses;
     }
 
-    async _handleSearchResults(pageProps, lensDefaults = {}) {
+    _handleSearchResults(pageProps, lensDefaults = {}) {
         if (!pageProps) {
             return [];
         }
