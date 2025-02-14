@@ -8,6 +8,8 @@ const overwriteExistingBolts = false;
 const overwriteExistingData = false;
 const saveIncompleteLensInfo = false;
 
+const resolvedLensCache = new Map();
+
 const urlRegex = /^(https?:\/\/)[^\s/$.?#].[^\s]*$/i;
 
 const inputFile = process.argv[2];
@@ -35,7 +37,7 @@ try {
                     if (lenses && lenses.length) {
                         console.log(`[Resolving] ${lenses.length} Lenses from URL: ${url}`);
 
-                        await Utils.crawlLenses(lenses, { crawler, overwriteExistingBolts, overwriteExistingData, saveIncompleteLensInfo });
+                        await Utils.crawlLenses(lenses, { crawler, resolvedLensCache, overwriteExistingBolts, overwriteExistingData, saveIncompleteLensInfo });
 
                         console.log(`[Finished] ${lenses.length} Lenses from URL: ${url}`);
                         console.log(`-----`);

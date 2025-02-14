@@ -8,8 +8,6 @@ import SnapLensWebCrawler from "../../crawler.js";
 
 const defaultCrawler = new SnapLensWebCrawler();
 
-const resolvedLensCache = new Map();
-
 const boltBasePath = "./output/bolts/";
 const infoBasePath = "./output/info/";
 
@@ -78,7 +76,7 @@ function isLensInfoMissing(lensInfo) {
     return (isLensIdMissing || isLensNameMissing || isUserNameMissing || isCreatorTagsMissing);
 }
 
-async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteExistingData = false, saveIncompleteLensInfo = false, crawler = null } = {}) {
+async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteExistingData = false, saveIncompleteLensInfo = false, crawler = null, resolvedLensCache = new Map() } = {}) {
     if (!(crawler instanceof SnapLensWebCrawler)) {
         crawler = defaultCrawler;
     }
@@ -86,7 +84,7 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
     for (let lensInfo of lenses) {
         try {
             if (lensInfo.uuid) {
-                if (resolvedLensCache.has(lensInfo.uuid)) {
+                if (resolvedLensCache && resolvedLensCache.has(lensInfo.uuid)) {
                     continue;
                 }
 
@@ -166,9 +164,6 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                     lensInfo.snapcode_url = crawler._snapcodeUrl(lensInfo.uuid);
                 }
 
-                // mark lens as resolved for the current crawl iteration since there are no more sources to query
-                resolvedLensCache.set(lensInfo.uuid, true);
-
                 // download and write lens bolt to file and generate a checksum and signature file
                 if (lensInfo.lens_url) {
                     const boltFolderPath = path.resolve(`${boltBasePath}${lensInfo.uuid}`);
@@ -244,6 +239,12 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                     } catch (err) {
                         console.error(`Error trying to save ${infoFilePath}:`, err);
                     }
+                }
+
+                // mark lens as resolved for the current crawl iteration
+                // since there are no more sources to query
+                if (resolvedLensCache) {
+                    resolvedLensCache.set(lensInfo.uuid, true);
                 }
             } else {
                 console.error(`Lens UUID is missing`, lensInfo);

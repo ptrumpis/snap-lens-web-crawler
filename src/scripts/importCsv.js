@@ -7,6 +7,8 @@ const crawler = new SnapLensWebCrawler({ cacheTTL: 86400, maxRequestRetries: 1 }
 const overwriteExistingBolts = false;
 const overwriteExistingData = false;
 
+const resolvedLensCache = new Map();
+
 const inputFile = process.argv[2];
 if (!inputFile) {
     console.error('No input file specified.');
@@ -23,7 +25,7 @@ try {
             try {
                 console.log(`[Import CSV] Importing ${lenses.length} Lenses by UUID from CSV file: '${inputFile}'`);
 
-                await Utils.crawlLenses(lenses, { crawler, overwriteExistingBolts, overwriteExistingData, saveIncompleteLensInfo: false });
+                await Utils.crawlLenses(lenses, { crawler, resolvedLensCache, overwriteExistingBolts, overwriteExistingData, saveIncompleteLensInfo: false });
             } catch (e) {
                 console.error(e);
             }
