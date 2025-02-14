@@ -285,34 +285,27 @@ export default class SnapLensWebCrawler {
     }
 
     async _getTopLenses(url, maxLenses = 100, lensDefaults = {}) {
-        let lenses = [];
+        const lenses = [];
+        const currentUrl = new URL(url);
 
         try {
-            // loop through all "load more lenses" pages identified by a cursor ID
-            let hasMore = false;
-            let nextCursorId = '';
-
-            const currentUrl = new URL(url);
-            do {
-                if (hasMore && nextCursorId) {
-                    currentUrl.searchParams.set('cursor_id', nextCursorId);
-                }
-
+            while (lenses.length < maxLenses) {
                 const pageProps = await this._crawlJsonFromUrl(currentUrl.toString(), "props.pageProps");
-                if (pageProps?.topLenses) {
-                    const results = pageProps.topLenses;
-                    for (const index in results) {
-                        if (maxLenses && lenses.length >= maxLenses) {
-                            break;
-                        }
-                        lenses.push(this._formatLensItem(results[index], lensDefaults));
-                    }
+                if (!pageProps?.topLenses) {
+                    break;
                 }
 
-                // more pages to load are identified by next cursor ID and a boolean flag 
-                hasMore = pageProps?.hasMore || false;
-                nextCursorId = pageProps?.nextCursorId || '';
-            } while (hasMore && nextCursorId && !(maxLenses && lenses.length >= maxLenses));
+                pageProps.topLenses
+                    .slice(0, maxLenses - lenses.length)
+                    .map(lens => lenses.push(this._formatLensItem(lens, lensDefaults)));
+
+                if (!pageProps.hasMore || !pageProps.nextCursorId) {
+                    break;
+                }
+
+                // loop through all "load more lenses" pages identified by a cursor ID
+                currentUrl.searchParams.set("cursor_id", pageProps.nextCursorId);
+            }
         } catch (e) {
             console.error(e);
         }
