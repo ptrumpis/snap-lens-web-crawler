@@ -261,27 +261,19 @@ export default class SnapLensWebCrawler {
     }
 
     async _getLensesByCreator(obfuscatedSlug, offset = 0, limit = 100) {
-        // limit 100 max
-        limit = Math.min(100, limit);
-
+        limit = Math.min(100, limit); // limit can not be greater than 100
         const url = `https://lensstudio.snapchat.com/v1/creator/lenses/?limit=${limit}&offset=${offset}&order=1&slug=${obfuscatedSlug}`;
 
-        let lenses = [];
         try {
             const lensesList = await this._getJsonFromUrl(url, "lensesList");
-            if (lensesList) {
-                for (let i = 0; i < lensesList.length; i++) {
-                    const item = lensesList[i];
-                    if (item.lensId && item.deeplinkUrl && item.name && item.creatorName) {
-                        lenses.push(this._formatLensItem(item, { obfuscatedSlug }));
-                    }
-                }
-            }
+            return (lensesList || [])
+                .filter(item => item.lensId && item.deeplinkUrl && item.name && item.creatorName)
+                .map(item => this._formatLensItem(item, { obfuscatedSlug }));
         } catch (e) {
             console.error(e);
         }
 
-        return lenses;
+        return [];
     }
 
     async _getTopLenses(url, maxLenses = 100, lensDefaults = {}) {
