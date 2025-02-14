@@ -6,7 +6,7 @@ const crawler = new SnapLensWebCrawler({ cacheTTL: 86400, maxRequestRetries: 1 }
 
 const overwriteExistingBolts = false;
 const overwriteExistingData = false;
-const saveIncompleteLensInfo = true;
+const saveIncompleteLensInfo = false;
 
 const urlRegex = /^(https?:\/\/)[^\s/$.?#].[^\s]*$/i;
 
@@ -22,18 +22,18 @@ try {
         const urls = lines.filter(line => urlRegex.test(line));
 
         if (urls && urls.length) {
-            console.log(`[Import URL]: Importing ${urls.length} URL's from text file: '${inputFile}'`);
+            console.log(`[Import URL] Importing ${urls.length} URL's from text file: '${inputFile}'`);
 
             for (const index in urls) {
                 const url = urls[index];
                 const n = parseInt(index) + 1;
 
                 try {
-                    console.log(`[Fetching]: URL (${n}/${urls.length}): ${url}`);
+                    console.log(`[Fetching] URL (${n}/${urls.length}): ${url}`);
 
-                    const lenses = await crawler.getAllLensesFromUrl(url);
+                    const lenses = await crawler.getLensesFromUrl(url);
                     if (lenses && lenses.length) {
-                        console.log(`[Resolving]: ${lenses.length} Lenses from URL: ${url}`);
+                        console.log(`[Resolving] ${lenses.length} Lenses from URL: ${url}`);
 
                         await Utils.crawlLenses(lenses, { crawler, overwriteExistingBolts, overwriteExistingData, saveIncompleteLensInfo });
                     }

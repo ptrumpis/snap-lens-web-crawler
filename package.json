@@ -18,7 +18,7 @@
     "start": "node src/index.js",
     "crawl": "node src/scripts/crawl.js",
     "import-csv": "node src/scripts/importCsv.js",
-    "import-urls": "node src/scripts/importUrls.js",
+    "import-url": "node src/scripts/importUrl.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Patrick Trumpis <ptrumpis@pm.me>",

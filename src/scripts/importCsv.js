@@ -22,7 +22,7 @@ try {
         const lenses = entries.filter((entry) => (entry.uuid));
         if (lenses && lenses.length) {
             try {
-                console.log(`[Import CSV]: Importing ${lenses.length} Lenses by UUID from CSV file: '${inputFile}'`);
+                console.log(`[Import CSV] Importing ${lenses.length} Lenses by UUID from CSV file: '${inputFile}'`);
 
                 await Utils.crawlLenses(lenses, { crawler, overwriteExistingBolts, overwriteExistingData, saveIncompleteLensInfo });
             } catch (e) {
@@ -34,18 +34,18 @@ try {
         const slugEntries = entries.filter((entry) => (entry.obfuscated_user_slug));
         if (slugEntries && slugEntries.length) {
 
-            console.log(`[Import CSV]: Importing ${slugEntries.length} Creator slugs from CSV file: '${inputFile}'`);
+            console.log(`[Import CSV] Importing ${slugEntries.length} Creator slugs from CSV file: '${inputFile}'`);
 
             for (const index in slugEntries) {
                 const creatorSlug = slugEntries[index].obfuscated_user_slug;
                 const n = parseInt(index) + 1;
 
                 try {
-                    console.log(`[Fetching]: Creator slug (${n}/${slugEntries.length}): ${creatorSlug}`);
+                    console.log(`[Fetching] Creator slug (${n}/${slugEntries.length}): ${creatorSlug}`);
 
                     const creatorLenses = await crawler.getLensesByCreator(creatorSlug);
                     if (creatorLenses && creatorLenses.length) {
-                        console.log(`[Resolving]: ${creatorLenses.length} Lenses by Creator (${n}/${slugEntries.length}): ${creatorSlug}`);
+                        console.log(`[Resolving] ${creatorLenses.length} Lenses by Creator (${n}/${slugEntries.length}): ${creatorSlug}`);
 
                         await Utils.crawlLenses(creatorLenses, { crawler, overwriteExistingBolts, overwriteExistingData, saveIncompleteLensInfo });
                     }

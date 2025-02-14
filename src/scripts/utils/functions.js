@@ -55,7 +55,7 @@ async function readTextFile(filePath) {
 
 async function generateSha256(filePath) {
     const data = await fs.readFile(filePath);
-    return crypto.createHash("sha256").update(data).digest("hex").toUpperCase();
+    return crypto.createHash('sha256').update(data).digest('hex').toUpperCase();
 }
 
 function getLensInfoTemplate() {
@@ -98,7 +98,7 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                 // read existing lens info from file
                 let existingLensInfo = {};
                 try {
-                    const data = await fs.readFile(infoFilePath, "utf8");
+                    const data = await fs.readFile(infoFilePath, 'utf8');
 
                     existingLensInfo = JSON.parse(data);
                     if (existingLensInfo) {
@@ -111,7 +111,7 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                         }
                     }
                 } catch (err) {
-                    if (err.code !== "ENOENT") {
+                    if (err.code !== 'ENOENT') {
                         console.error(`Error trying to read ${infoFilePath}:`, err);
                     }
                 }
@@ -202,7 +202,7 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                             // write sha256 checksum to file
                             if (lensInfo.sha256) {
                                 try {
-                                    await fs.writeFile(sha256FilePath, lensInfo.sha256, "utf8");
+                                    await fs.writeFile(sha256FilePath, lensInfo.sha256, 'utf8');
                                 } catch (e) {
                                     console.error(e);
                                 }
@@ -211,7 +211,7 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                             // write signature to file
                             if (lensInfo.signature) {
                                 try {
-                                    await fs.writeFile(sigFilePath, lensInfo.signature, "utf8");
+                                    await fs.writeFile(sigFilePath, lensInfo.signature, 'utf8');
                                 } catch (e) {
                                     console.error(e);
                                 }
@@ -223,7 +223,7 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                     lensInfo.is_mirrored = false;
 
                     // print warning for missing lens urls
-                    console.warn("URL missing for lens", lensInfo.uuid);
+                    console.warn(`[Incomplete] URL missing for lens: ${lensInfo.uuid}`);
                 }
 
                 // write lens info to json file
@@ -233,17 +233,23 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                         lensInfo = crawler.mergeLensItems(lensInfo, getLensInfoTemplate());
 
                         if (JSON.stringify(lensInfo) !== JSON.stringify(existingLensInfo)) {
-                            await fs.writeFile(infoFilePath, JSON.stringify(lensInfo, null, 2), "utf8");
+                            if (Object.keys(existingLensInfo).length === 0) {
+                                console.log(`[Lens.json] Writing new info file: ${lensInfo.uuid}`);
+                            } else {
+                                console.log(`[Lens.json] Updating existing info file: ${lensInfo.uuid}`);
+                            }
+
+                            await fs.writeFile(infoFilePath, JSON.stringify(lensInfo, null, 2), 'utf8');
                         }
                     } catch (err) {
                         console.error(`Error trying to save ${infoFilePath}:`, err);
                     }
                 }
             } else {
-                console.error("Lens UUID is missing", lensInfo);
+                console.error(`Lens UUID is missing`, lensInfo);
             }
         } catch (e) {
-            console.error("Error trying to process lens", lensInfo.uuid, e);
+            console.error(`Error trying to process lens: ${lensInfo.uuid}`, e);
         }
     }
 }
