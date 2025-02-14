@@ -16,6 +16,9 @@ for (const category in crawler.TOP_CATEGORIES) {
             console.log(`[Resolving] ${topLenses.length} Lenses from Category: ${category.toUpperCase()}`);
 
             await Utils.crawlLenses(topLenses, { crawler, overwriteExistingBolts, overwriteExistingData, saveIncompleteLensInfo });
+
+            console.log(`[Finished] ${topLenses.length} Lenses from Category: ${category.toUpperCase()}`);
+            console.log(`-----`);
         }
     } catch (e) {
         console.error(e);

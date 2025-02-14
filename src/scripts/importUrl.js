@@ -36,6 +36,9 @@ try {
                         console.log(`[Resolving] ${lenses.length} Lenses from URL: ${url}`);
 
                         await Utils.crawlLenses(lenses, { crawler, overwriteExistingBolts, overwriteExistingData, saveIncompleteLensInfo });
+
+                        console.log(`[Finished] ${lenses.length} Lenses from URL: ${url}`);
+                        console.log(`-----`);
                     }
 
                 } catch (e) {
