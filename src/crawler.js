@@ -89,6 +89,36 @@ export default class SnapLensWebCrawler {
         return merged;
     }
 
+    async getLensByHash(hash) {
+        const url = `https://lens.snapchat.com/${hash}`;
+        return await this._getSingleLens(url, { hash });
+    }
+
+    async getMoreLensesByHash(hash) {
+        const url = `https://lens.snapchat.com/${hash}`;
+        return await this._getMoreLenses(url, { hash })
+    }
+
+    async getLensesByUsername(userName) {
+        const url = `https://www.snapchat.com/add/${userName}`;
+        return await this._getUserLenses(url, { userName });
+    }
+
+    async getLensesByCreator(obfuscatedSlug, maxLenses = 1000) {
+        let lenses = [];
+
+        for (let offset = 0; offset < maxLenses; offset += 100) {
+            let limit = Math.min(maxLenses - offset, 100);
+            let result = await this._getLensesByCreator(obfuscatedSlug, offset, limit);
+            lenses = lenses.concat(result);
+            if (result.length < 100) {
+                break;
+            }
+        }
+
+        return lenses;
+    }
+
     async getTopLensesByCategory(category = 'default', maxLenses = 100) {
         if (!this.TOP_CATEGORIES[category]) {
             console.error(`Unknown top lens category: ${category} \nValid top lens categories are:`, Object.getOwnPropertyNames(this.TOP_CATEGORIES));
@@ -99,19 +129,12 @@ export default class SnapLensWebCrawler {
         return await this._getTopLenses(categoryBaseUrl, maxLenses);
     }
 
-    async getLensesByUsername(userName) {
-        const url = `https://www.snapchat.com/add/${userName}`;
-        return await this._getUserLenses(url, { userName });
-    }
+    async searchLenses(search) {
+        const slug = search.replace(/\W+/g, '-');
 
-    async getLensByHash(hash) {
-        const url = `https://lens.snapchat.com/${hash}`;
-        return await this._getSingleLens(url, { hash });
-    }
-
-    async getMoreLensesByHash(hash) {
-        const url = `https://lens.snapchat.com/${hash}`;
-        return await this._getMoreLenses(url, { hash })
+        const url = `https://www.snapchat.com/explore/${slug}`;
+        const pageProps = await this._crawlJsonFromUrl(url, "props.pageProps");
+        return this._handleSearchResults(pageProps);
     }
 
     async getLensByArchivedSnapshot(hash) {
@@ -163,94 +186,31 @@ export default class SnapLensWebCrawler {
         return lens;
     }
 
-    async getAllLensesByCreator(obfuscatedSlug) {
-        let lenses = [];
-
-        for (let offset = 0; offset < 1000; offset += 100) {
-            let result = await this.getLensesByCreator(obfuscatedSlug, offset, 100);
-            lenses = lenses.concat(result);
-            if (result.length < 100) {
-                break;
-            }
-        }
-
-        return lenses;
-    }
-
-    async getLensesByCreator(obfuscatedSlug, offset = 0, limit = 100) {
-        limit = Math.min(100, limit);
-
-        const url = `https://lensstudio.snapchat.com/v1/creator/lenses/?limit=${limit}&offset=${offset}&order=1&slug=${obfuscatedSlug}`;
-
-        let lenses = [];
+    async getLensesFromUrl(url, lensDefaults = {}) {
         try {
-            const lensesList = await this._getJsonFromUrl(url, "lensesList");
-            if (lensesList) {
-                for (let i = 0; i < lensesList.length; i++) {
-                    const item = lensesList[i];
-                    if (item.lensId && item.deeplinkUrl && item.name && item.creatorName) {
-                        lenses.push(this._formatLensItem(item, { obfuscatedSlug }));
-                    }
-                }
+            const pageProps = await this._crawlJsonFromUrl(url, "props.pageProps");
+            if (!pageProps) {
+                return [];
             }
+
+            const sources = [
+                pageProps.lensDisplayInfo,
+                pageProps.moreLenses,
+                pageProps.lenses,
+                pageProps.topLenses
+            ];
+
+            let lenses = sources
+                .flatMap(source => Array.isArray(source) ? source : [source])
+                .filter(Boolean)
+                .map(lens => this._formatLensItem(lens, lensDefaults));
+
+            return lenses.concat(this._handleSearchResults(pageProps, lensDefaults));
         } catch (e) {
             console.error(e);
         }
 
-        return lenses;
-    }
-
-    async searchLenses(search) {
-        const slug = search.replace(/\W+/g, '-');
-
-        let lenses = [];
-        try {
-            const url = `https://www.snapchat.com/explore/${slug}`;
-            const results = await this._crawlJsonFromUrl(url, "props.pageProps.initialApolloState", "props.pageProps.encodedSearchResponse");
-            if (results) {
-                if (typeof results === 'object') {
-                    // original data structure
-                    for (const key in results) {
-                        if (key != 'ROOT_QUERY') {
-                            if (results[key].id && results[key].deeplinkUrl && results[key].lensName) {
-                                lenses.push(this._formatLensItem(results[key]));
-                            }
-                        }
-                    }
-                } else if (typeof results === 'string') {
-                    // new data structure introduced in summer 2024
-                    const searchResult = JSON.parse(results);
-                    let lensSectionResults = [];
-
-                    // try to find "Lenses" section
-                    for (const index in searchResult.sections) {
-                        if (searchResult.sections[index].title === 'Lenses') {
-                            lensSectionResults = searchResult.sections[index].results;
-                            break;
-                        }
-                    }
-
-                    // save each lens
-                    for (const index in lensSectionResults) {
-                        if (lensSectionResults[index]?.result?.lens) {
-                            let lens = lensSectionResults[index].result.lens;
-                            if (lens.lensId && lens.deeplinkUrl && lens.name) {
-                                lenses.push(this._formatLensItem(lens));
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (e) {
-            console.error(e);
-        }
-
-        return lenses;
-    }
-
-    async getAllLensesFromUrl(url) {
-        // TODO: implement
-        return null;
+        return [];
     }
 
     async _getSingleLens(url, lensDefaults = {}) {
@@ -300,6 +260,30 @@ export default class SnapLensWebCrawler {
         return lenses;
     }
 
+    async _getLensesByCreator(obfuscatedSlug, offset = 0, limit = 100) {
+        // limit 100 max
+        limit = Math.min(100, limit);
+
+        const url = `https://lensstudio.snapchat.com/v1/creator/lenses/?limit=${limit}&offset=${offset}&order=1&slug=${obfuscatedSlug}`;
+
+        let lenses = [];
+        try {
+            const lensesList = await this._getJsonFromUrl(url, "lensesList");
+            if (lensesList) {
+                for (let i = 0; i < lensesList.length; i++) {
+                    const item = lensesList[i];
+                    if (item.lensId && item.deeplinkUrl && item.name && item.creatorName) {
+                        lenses.push(this._formatLensItem(item, { obfuscatedSlug }));
+                    }
+                }
+            }
+        } catch (e) {
+            console.error(e);
+        }
+
+        return lenses;
+    }
+
     async _getTopLenses(url, maxLenses = 100, lensDefaults = {}) {
         let lenses = [];
 
@@ -336,6 +320,36 @@ export default class SnapLensWebCrawler {
         return lenses;
     }
 
+    async _handleSearchResults(pageProps, lensDefaults = {}) {
+        if (!pageProps) {
+            return [];
+        }
+
+        try {
+            if (typeof pageProps.initialApolloState === "object") {
+                // original data structure
+                return Object.values(pageProps.initialApolloState)
+                    .filter(item => item.id && item.deeplinkUrl && item.lensName)
+                    .map(lens => this._formatLensItem(lens, lensDefaults));
+            }
+
+            if (typeof pageProps.encodedSearchResponse === "string") {
+                // new data structure introduced in summer 2024
+                const searchResult = JSON.parse(pageProps.encodedSearchResponse);
+                const lensSection = searchResult.sections.find(section => section.title === "Lenses");
+
+                return (lensSection?.results || [])
+                    .map(entry => entry?.result?.lens)
+                    .filter(lens => lens?.lensId && lens.deeplinkUrl && lens.name)
+                    .map(lens => this._formatLensItem(lens, lensDefaults));
+            }
+        } catch (e) {
+            console.error(e);
+        }
+
+        return [];
+    }
+
     async _queryArchivedSnapshot(url) {
         // use official API: https://archive.org/help/wayback_api.php
         const apiUrl = `https://archive.org/wayback/available?timestamp=${this.SNAPSHOT_TIMESTAMP}&url=${encodeURIComponent(url)}`;
@@ -368,13 +382,13 @@ export default class SnapLensWebCrawler {
     }
 
     async _crawlJsonFromUrl(url, ...jsonObjPath) {
-        try {
-            // use JSON cache to avoid unecessary requests
-            const jsonObj = this._getJsonCache(url);
-            if (typeof jsonObj !== 'undefined') {
-                return this._getProperty(jsonObj, ...jsonObjPath);
-            }
+        // use JSON cache to avoid unecessary requests
+        const jsonObj = this._getJsonCache(url);
+        if (typeof jsonObj !== 'undefined') {
+            return this._getProperty(jsonObj, ...jsonObjPath);
+        }
 
+        try {
             console.log(`[Crawling] ${url}`);
 
             const body = await this._loadUrl(url);

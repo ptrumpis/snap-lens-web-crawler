@@ -43,7 +43,7 @@ try {
                 try {
                     console.log(`[Fetching]: Creator slug (${n}/${slugEntries.length}): ${creatorSlug}`);
 
-                    const creatorLenses = await crawler.getAllLensesByCreator(creatorSlug);
+                    const creatorLenses = await crawler.getLensesByCreator(creatorSlug);
                     if (creatorLenses && creatorLenses.length) {
                         console.log(`[Resolving]: ${creatorLenses.length} Lenses by Creator (${n}/${slugEntries.length}): ${creatorSlug}`);
 
