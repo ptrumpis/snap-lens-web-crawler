@@ -167,7 +167,7 @@ export default class SnapLensWebCrawler {
                 let snapshotLens = await this._getSingleLens(snapshot.url, { hash });
                 if (snapshotLens) {
                     // fix resource urls since wayback machine does not actually store lens files
-                    snapshotLens = JSON.parse(this._fixArchiveUrlPrefixes(JSON.stringify(snapshotLens)));
+                    snapshotLens = this._fixArchiveUrlPrefixes(snapshotLens);
 
                     // keep looking for snapshots until we found our precious lens url
                     lens = this.mergeLensItems(snapshotLens, lens);
@@ -205,7 +205,9 @@ export default class SnapLensWebCrawler {
                 .filter(Boolean)
                 .map(lens => this._formatLensItem(lens, lensDefaults));
 
-            return lenses.concat(this._handleSearchResults(pageProps, lensDefaults));
+            return lenses
+                .concat(this._handleSearchResults(pageProps, lensDefaults))
+                .map(lens => this._fixArchiveUrlPrefixes(lens));
         } catch (e) {
             console.error(e);
         }
@@ -672,9 +674,10 @@ export default class SnapLensWebCrawler {
         return 'Invalid Date';
     }
 
-    _fixArchiveUrlPrefixes(text) {
+    _fixArchiveUrlPrefixes(obj) {
+        const text = JSON.stringify(obj);
         const regex = /https?:\/\/web\.archive\.org\/web\/\d+\//g;
-        return text.replace(regex, '');
+        return JSON.parse(text.replace(regex, ''));
     }
 
     _getProperty(obj, ...selectors) {
