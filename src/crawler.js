@@ -279,17 +279,22 @@ export default class SnapLensWebCrawler {
     async _getTopLenses(url, maxLenses = 100, lensDefaults = {}) {
         const lenses = [];
         const currentUrl = new URL(url);
+        const shouldLimit = Number.isInteger(maxLenses) && maxLenses > 0;
 
         try {
-            while (lenses.length < maxLenses) {
+            while (!shouldLimit || lenses.length < maxLenses) {
                 const pageProps = await this._crawlJsonFromUrl(currentUrl.toString(), "props.pageProps");
                 if (!pageProps?.topLenses) {
                     break;
                 }
 
-                pageProps.topLenses
-                    .slice(0, maxLenses - lenses.length)
-                    .map(lens => lenses.push(this._formatLensItem(lens, lensDefaults)));
+                let newLenses = pageProps.topLenses;
+                if (shouldLimit && lenses.length < maxLenses) {
+                    const remaining = maxLenses - lenses.length;
+                    newLenses = newLenses.slice(0, Math.max(0, remaining));
+                }
+
+                newLenses.forEach(lens => lenses.push(this._formatLensItem(lens, lensDefaults)));
 
                 if (!pageProps.hasMore || !pageProps.nextCursorId) {
                     break;
