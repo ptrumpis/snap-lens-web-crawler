@@ -90,18 +90,15 @@ export default class SnapLensWebCrawler {
     }
 
     async getLensByHash(hash) {
-        const url = `https://lens.snapchat.com/${hash}`;
-        return await this._getSingleLens(url, { hash });
+        return await this._getSingleLens(`https://lens.snapchat.com/${hash}`, { hash });
     }
 
     async getMoreLensesByHash(hash) {
-        const url = `https://lens.snapchat.com/${hash}`;
-        return await this._getMoreLenses(url, { hash })
+        return await this._getMoreLenses(`https://lens.snapchat.com/${hash}`, { hash })
     }
 
     async getLensesByUsername(userName) {
-        const url = `https://www.snapchat.com/add/${userName}`;
-        return await this._getUserLenses(url, { userName });
+        return await this._getUserLenses(`https://www.snapchat.com/add/${userName}`, { userName });
     }
 
     async getLensesByCreator(obfuscatedSlug, maxLenses = 1000) {
@@ -110,7 +107,7 @@ export default class SnapLensWebCrawler {
         for (let offset = 0; offset < maxLenses; offset += 100) {
             let limit = Math.min(maxLenses - offset, 100);
             let result = await this._getLensesByCreator(obfuscatedSlug, offset, limit);
-            lenses = lenses.concat(result);
+            lenses.push(...result);
             if (result.length < 100) {
                 break;
             }
@@ -125,15 +122,13 @@ export default class SnapLensWebCrawler {
             return null;
         }
 
-        const categoryBaseUrl = `https://www.snapchat.com/lens${this.TOP_CATEGORIES[category]}`;
-        return await this._getTopLenses(categoryBaseUrl, maxLenses);
+        return await this._getTopLenses(`https://www.snapchat.com/lens${this.TOP_CATEGORIES[category]}`, maxLenses);
     }
 
     async searchLenses(search) {
         const slug = search.replace(/\W+/g, '-');
 
-        const url = `https://www.snapchat.com/explore/${slug}`;
-        const pageProps = await this._crawlJsonFromUrl(url, "props.pageProps");
+        const pageProps = await this._crawlJsonFromUrl(`https://www.snapchat.com/explore/${slug}`, "props.pageProps");
         return this._handleSearchResults(pageProps);
     }
 
@@ -229,37 +224,29 @@ export default class SnapLensWebCrawler {
     }
 
     async _getMoreLenses(url, lensDefaults = {}) {
-        let lenses = [];
-
         try {
-            const results = await this._crawlJsonFromUrl(url, "props.pageProps.moreLenses");
-            if (results) {
-                for (const index in results) {
-                    lenses.push(this._formatLensItem(results[index], lensDefaults));
-                }
+            const lenses = await this._crawlJsonFromUrl(url, "props.pageProps.moreLenses");
+            if (lenses) {
+                return lenses.map(lens => this._formatLensItem(lens, lensDefaults));
             }
         } catch (e) {
             console.error(e);
         }
 
-        return lenses;
+        return [];
     }
 
     async _getUserLenses(url, lensDefaults = {}) {
-        let lenses = [];
-
         try {
-            const results = await this._crawlJsonFromUrl(url, "props.pageProps.lenses");
-            if (results) {
-                for (const index in results) {
-                    lenses.push(this._formatLensItem(results[index], lensDefaults));
-                }
+            const lenses = await this._crawlJsonFromUrl(url, "props.pageProps.lenses");
+            if (lenses) {
+                return lenses.map(lens => this._formatLensItem(lens, lensDefaults));
             }
         } catch (e) {
             console.error(e);
         }
 
-        return lenses;
+        return [];
     }
 
     async _getLensesByCreator(obfuscatedSlug, offset = 0, limit = 100) {
@@ -347,29 +334,33 @@ export default class SnapLensWebCrawler {
         const apiUrl = `https://archive.org/wayback/available?timestamp=${this.SNAPSHOT_TIMESTAMP}&url=${encodeURIComponent(url)}`;
 
         const snaphot = await this._getJsonFromUrl(apiUrl, "archived_snapshots");
-        if (snaphot) {
-            if (snaphot.closest?.url && snaphot.closest?.timestamp) {
-                const snapshotTime = (snaphot.closest.timestamp) ? parseInt(snaphot.closest.timestamp) : 0;
-                if (snapshotTime && snapshotTime >= this.SNAPSHOT_THRESHOLD_MIN && snapshotTime <= this.SNAPSHOT_THRESHOLD_MAX) {
-                    try {
-                        const snapshotUrl = new URL(snaphot.closest.url);
-                        return {
-                            url: snapshotUrl.toString(),
-                            date: this._archiveTimestampToDateString(snapshotTime)
-                        };
-                    } catch (e) {
-                        // invalid url
-                        console.error(`[Error] Invalid Snapshot URL: ${url} - ${e.message}`);
-                        return undefined;
-                    }
-                }
-                // snapshot exists but does not match criteria
-                return true;
-            }
+        if (!snaphot) {
+            // request failed or json error
+            return undefined;
+        }
+
+        if (!snaphot.closest?.url || !snaphot.closest?.timestamp) {
             // snapshot does not exist
             return false;
         }
-        // request failed or json error
+
+        const snapshotTime = parseInt(snaphot.closest.timestamp) || 0;
+        if (snapshotTime < this.SNAPSHOT_THRESHOLD_MIN || snapshotTime > this.SNAPSHOT_THRESHOLD_MAX) {
+            // snapshot exists but does not match criteria
+            return true;
+        }
+
+        try {
+            const snapshotUrl = new URL(snaphot.closest.url);
+            return {
+                url: snapshotUrl.toString(),
+                date: this._archiveTimestampToDateString(snapshotTime)
+            };
+        } catch (e) {
+            // invalid url
+            console.error(`[Error] Invalid Snapshot URL: ${url} - ${e.message}`);
+        }
+
         return undefined;
     }
 
