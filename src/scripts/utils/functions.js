@@ -165,7 +165,7 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                 }
 
                 // download and write lens bolt to file and generate a checksum and signature file
-                if (lensInfo.lens_url) {
+                if (lensInfo.lens_url && !lensInfo.is_mirrored) {
                     const boltFolderPath = path.resolve(`${boltBasePath}${lensInfo.uuid}`);
                     const lensFilePath = path.join(boltFolderPath, "lens.lns");
                     const sha256FilePath = path.join(boltFolderPath, "lens.sha256");
@@ -213,8 +213,10 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                             }
                         }
                     }
+
+                    // prevent re-downloading
                     lensInfo.is_mirrored = boltFileExists;
-                } else {
+                } else if (!lensInfo.lens_url) {
                     lensInfo.is_mirrored = false;
 
                     // print warning for missing lens urls
