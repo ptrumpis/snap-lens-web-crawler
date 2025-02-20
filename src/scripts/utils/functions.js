@@ -117,6 +117,8 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                 // try to resolve missing information from single page
                 // lens URL's are no longer available
                 if (isLensInfoMissing(lensInfo)) {
+                    console.log(`[Crawling] https://lens.snapchat.com/${lensInfo.uuid}`);
+
                     const liveLensInfo = await crawler.getLensByHash(lensInfo.uuid);
                     if (liveLensInfo) {
                         lensInfo = crawler.mergeLensItems(lensInfo, liveLensInfo);
@@ -131,6 +133,8 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                 // try to resolve missing URL's from archived snapshots
                 const isLensUrlMissing = (!lensInfo.lens_url && lensInfo.has_archived_snapshots !== false);
                 if (isLensUrlMissing) {
+                    console.log(`[Wayback Machine] Trying to find lens: ${lensInfo.uuid}`);
+
                     const archivedLensInfo = await crawler.getLensByArchivedSnapshot(lensInfo.uuid);
                     if (archivedLensInfo) {
                         lensInfo = crawler.mergeLensItems(lensInfo, archivedLensInfo);
@@ -138,7 +142,15 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                         // mark the non-existence of archived snapshots (prevent unecessary re-crawl)
                         if (!archivedLensInfo.lens_url && archivedLensInfo.archived_snapshot_failures === 0) {
                             lensInfo.has_archived_snapshots = false;
+                        } else if (archivedLensInfo.snapshot) {
+                            console.log(`[Found Snapshot] ${archivedLensInfo.uuid} - ${archivedLensInfo.snapshot.date}`);
+
+                            // save reference
+                            lensInfo.from_snapshot = archivedLensInfo.snapshot.url;
                         }
+
+                        // do not store snapshot
+                        delete lensInfo.snapshot;
 
                         // do not store failures
                         delete lensInfo.archived_snapshot_failures;
@@ -165,7 +177,7 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                 }
 
                 // download and write lens bolt to file and generate a checksum and signature file
-                if (lensInfo.lens_url && !lensInfo.is_mirrored) {
+                if (lensInfo.lens_url && (!lensInfo.is_mirrored  || overwriteExistingBolts)) {
                     const boltFolderPath = path.resolve(`${boltBasePath}${lensInfo.uuid}`);
                     const lensFilePath = path.join(boltFolderPath, "lens.lns");
                     const sha256FilePath = path.join(boltFolderPath, "lens.sha256");
@@ -182,6 +194,8 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                     // otherwise overwrite existing file if flag is set
                     if (!boltFileExists || overwriteExistingBolts) {
                         try {
+                            console.log(`[Downloading] ${lensInfo.lens_url}`);
+
                             // actually download the lens bolt
                             if (await crawler.downloadFile(lensInfo.lens_url, lensFilePath)) {
                                 boltFileExists = true;

@@ -51,8 +51,6 @@ export default class SnapLensWebCrawler {
     }
 
     async downloadFile(url, dest) {
-        console.log(`[Downloading] ${url}`);
-
         try {
             const response = await this._requestGently(url, 'GET');
             if (response?.ok) {
@@ -142,8 +140,6 @@ export default class SnapLensWebCrawler {
         let lens = {};
         let failures = 0;
         try {
-            console.log(`[Wayback Machine] Trying to find lens: ${hash}`);
-
             for (const index in lensUrls) {
                 const targetUrl = lensUrls[index];
 
@@ -157,8 +153,6 @@ export default class SnapLensWebCrawler {
                     continue;
                 }
 
-                console.log(`[Found Snapshot] ${targetUrl} - ${snapshot.date}`);
-
                 let snapshotLens = await this._getSingleLens(snapshot.url, { hash });
                 if (snapshotLens) {
                     // fix resource urls since wayback machine does not actually store lens files
@@ -167,7 +161,7 @@ export default class SnapLensWebCrawler {
                     // keep looking for snapshots until we found our precious lens url
                     lens = this.mergeLensItems(snapshotLens, lens);
                     if (lens.lens_url) {
-                        lens.from_snapshot = snapshot.url; // save reference
+                        lens.snapshot = snapshot;
                         break;
                     }
                 }
@@ -372,8 +366,6 @@ export default class SnapLensWebCrawler {
         }
 
         try {
-            console.log(`[Crawling] ${url}`);
-
             const body = await this._loadUrl(url);
             if (typeof body !== 'string' || !body) {
                 // request failed
@@ -420,8 +412,6 @@ export default class SnapLensWebCrawler {
         }
 
         try {
-            console.log(`[API Request] ${url}`);
-
             const jsonString = await this._loadUrl(url);
             if (typeof jsonString !== 'string' || !jsonString) {
                 // request failed
