@@ -27,6 +27,7 @@ export default class SnapLensWebCrawler {
         connectionTimeoutMs = 9000,
         minRequestDelayMs = 500,
         cacheTTL = 3600,
+        gcInterval = 3600,
         failedRequestDelayMs = 3000,
         maxRequestRetries = 2,
         headers = null
@@ -42,10 +43,14 @@ export default class SnapLensWebCrawler {
         this.lastRequestTimestamps = new Map();
         this.jsonCache = new Map();
 
-        this.cacheTTL = (cacheTTL) ? Math.max(cacheTTL * 1000, 60 * 1000) : 0;
+        this.cacheTTL = (cacheTTL) ? Math.max(parseInt(cacheTTL) * 1000, 60 * 1000) : 0;
+        this.gcInterval = Math.max(parseInt(gcInterval) * 1000, 5 * 60 * 1000);
+
+        this.cleanupInterval = setInterval(() => {this._cleanupCache()}, this.gcInterval).unref();
     }
 
-    clearCache() {
+    destroy() {
+        clearInterval(this.cleanupInterval);
         this.lastRequestTimestamps.clear();
         this.jsonCache.clear();
     }
@@ -553,6 +558,25 @@ export default class SnapLensWebCrawler {
         }
 
         return undefined;
+    }
+
+    _cleanupCache() {
+        const now = Date.now();
+        try {
+            for (const [url, cacheEntry] of this.jsonCache) {
+                if (now - cacheEntry.timestamp >= this.cacheTTL) {
+                    this.jsonCache.delete(url);
+                }
+            }
+
+            for (const [hostname, timestamp] of this.lastRequestTimestamps) {
+                if (now - timestamp >= this.cacheTTL) {
+                    this.lastRequestTimestamps.delete(hostname);
+                }
+            }
+        } catch (e) {
+            console.error(e);
+        }
     }
 
     _formatLensItem(lensItem, options = {}) {
