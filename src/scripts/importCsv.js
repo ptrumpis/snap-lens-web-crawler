@@ -2,7 +2,7 @@ import SnapLensWebCrawler from "../crawler.js";
 import * as Utils from "./utils/functions.js";
 import process from 'process';
 
-const crawler = new SnapLensWebCrawler({ cacheTTL: 86400, maxRequestRetries: 1 });
+const crawler = new SnapLensWebCrawler({ cacheTTL: 86400, maxRequestRetries: 2 });
 
 const overwriteExistingBolts = false;
 const overwriteExistingData = false;
