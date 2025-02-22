@@ -52,3 +52,5 @@ try {
 } catch (e) {
     console.error(e);
 }
+
+crawler.destroy();
