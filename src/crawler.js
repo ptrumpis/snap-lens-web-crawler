@@ -512,13 +512,19 @@ export default class SnapLensWebCrawler {
                 if (response.status >= 400 && response.status < 600) {
                     const statusError = new Error(`HTTP Status ${response.status}`);
                     statusError.name = 'ResponseStatus';
+                    statusError.code = parseInt(response.status);
                     throw statusError
                 }
 
                 return response;
             } catch (e) {
                 if (e.name === 'ResponseStatus') {
-                    console.error(`[Failed] (${attempt}/${maxAttempts}): ${url} - ${e.message}`);
+                    if (e.code == 404) {
+                        console.error(`[Not Found]: ${url} - ${e.message}`);
+                        break; // do not retry 404
+                    } else {
+                        console.error(`[Failed] (${attempt}/${maxAttempts}): ${url} - ${e.message}`);
+                    }
                 } else if (e.name === 'AbortError') {
                     console.error(`[Timeout] (${attempt}/${maxAttempts}): ${url}`);
                 } else {
