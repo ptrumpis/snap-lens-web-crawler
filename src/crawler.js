@@ -28,7 +28,7 @@ export default class SnapLensWebCrawler {
         minRequestDelayMs = 500,
         cacheTTL = 3600,
         gcInterval = 3600,
-        failedRequestDelayMs = 3000,
+        failedRequestDelayMs = 4500,
         maxRequestRetries = 2,
         headers = null
     } = {}) {
