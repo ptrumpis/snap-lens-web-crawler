@@ -1,6 +1,6 @@
 {
   "name": "@ptrumpis/snap-lens-web-crawler",
-  "version": "0.9.3",
+  "version": "0.9.5",
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
