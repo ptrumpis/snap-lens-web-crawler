@@ -1,6 +1,10 @@
 {
-  "name": "snap-lens-web-crawler",
+  "name": "@ptrumpis/snap-lens-web-crawler",
   "version": "0.9.3",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "description": "Crawl and download Snap Lenses from *lens.snapchat.com* with ease.",
   "keywords": [
     "snapchat",
