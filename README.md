@@ -6,22 +6,20 @@
 [![GitHub forks](https://img.shields.io/github/forks/ptrumpis/snap-lens-web-crawler?style=flat)](https://github.com/ptrumpis/snap-lens-web-crawler/forks)
 
 # 👻 Snap Lens Web Crawler
-JavaScript library to crawl and download Snap Lenses from *lens.snapchat.com* with ease.
+JavaScript library to crawl and download Snap Lenses from *lens.snapchat.com* with ease.  
 
 ## ⚠️ Requirements
 - cheerio
 - node-fetch
 
 ## 🚀 Usage
-
-### Command Line test usage
-Uncomment code examples in `src/index.js` to get started.
-
-```
-npm start
+### npm
+```shell
+npm i @ptrumpis/snap-lens-web-crawler
 ```
 
-### Example usage in JavaScript project
+### JavaScript
+Uncomment code examples in `src/index.js` and run `npm start` to get started.
 
 ```javascript
 import LensWebCrawler from "./src/crawler.js";
@@ -37,9 +35,11 @@ const searchResults = await crawler.searchLenses('SEARCH TERM');
 ```
 
 ## ℹ️ Info
-The return values are Snap Camera compatible object(s).
+### Dependents
+This package is a dependency of:  
+[👻 Snap Camera Server](https://github.com/ptrumpis/snap-camera-server)
 
-This crawler is a dependency of [Snap Camera Server](https://github.com/ptrumpis/snap-camera-server)
+The return values are Snap Camera / Snap Camera Server compatible object(s).
 
 ## ❤️ Support
 If you like my work and want to support me, feel free to invite me for a virtual coffee ☕  
