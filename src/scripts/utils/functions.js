@@ -84,6 +84,8 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
     for (let lensInfo of lenses) {
         try {
             if (lensInfo.uuid) {
+                lensInfo.uuid = lensInfo.uuid.toLowerCase();
+
                 if (resolvedLensCache && resolvedLensCache.has(lensInfo.uuid)) {
                     continue;
                 }
@@ -106,6 +108,7 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                         } else {
                             // keep existing data and add missing information only
                             lensInfo = crawler.mergeLensItems(existingLensInfo, lensInfo);
+                            lensInfo.uuid = lensInfo.uuid.toLowerCase();
                         }
                     }
                 } catch (err) {
@@ -177,7 +180,7 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                 }
 
                 // download and write lens bolt to file and generate a checksum and signature file
-                if (lensInfo.lens_url && (!lensInfo.is_mirrored  || overwriteExistingBolts)) {
+                if (lensInfo.lens_url && (!lensInfo.is_mirrored || overwriteExistingBolts)) {
                     const boltFolderPath = path.resolve(`${boltBasePath}${lensInfo.uuid}`);
                     const lensFilePath = path.join(boltFolderPath, "lens.lns");
                     const sha256FilePath = path.join(boltFolderPath, "lens.sha256");
