@@ -1,4 +1,4 @@
-import SnapLensWebCrawler from "../crawler.js";
+import SnapLensWebCrawler from "../lib/crawler.js";
 import * as Utils from "./utils/functions.js";
 import process from 'process';
 

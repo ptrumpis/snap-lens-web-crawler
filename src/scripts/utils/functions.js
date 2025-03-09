@@ -4,7 +4,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { createReadStream } from 'fs';
 import { pipeline } from 'stream/promises';
-import SnapLensWebCrawler from "../../crawler.js";
+import SnapLensWebCrawler from "../../lib/crawler.js";
 
 const defaultCrawler = new SnapLensWebCrawler();
 
@@ -57,7 +57,7 @@ async function generateSha256(filePath) {
 }
 
 function getLensInfoTemplate() {
-    return Object.assign(defaultCrawler._formatLensItem({}), {
+    return Object.assign(defaultCrawler.formatLensItem({}), {
         lens_id: "",
         lens_url: "",
         signature: "",
@@ -172,11 +172,11 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
 
                 // unlock URL and snapcode URL can be set manually
                 if (!lensInfo.deeplink) {
-                    lensInfo.deeplink = crawler._deeplinkUrl(lensInfo.uuid);
+                    lensInfo.deeplink = crawler.deeplinkUrl(lensInfo.uuid);
                 }
 
                 if (!lensInfo.snapcode_url) {
-                    lensInfo.snapcode_url = crawler._snapcodeUrl(lensInfo.uuid);
+                    lensInfo.snapcode_url = crawler.snapcodeUrl(lensInfo.uuid);
                 }
 
                 // download and write lens bolt to file and generate a checksum and signature file

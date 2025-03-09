@@ -13,13 +13,16 @@
     "lens",
     "crawler"
   ],
-  "main": "src/crawler.js",
+  "main": "src/index.js",
   "exports": {
-    ".": "./src/crawler.js"
+    ".": "./src/index.js",
+    "./crawler": {
+      "import": "./src/lib/crawler.js",
+      "default": "./src/lib/crawler.js"
+    }
   },
   "type": "module",
   "scripts": {
-    "start": "node src/index.js",
     "crawl": "node src/scripts/crawl.js",
     "import-csv": "node src/scripts/importCsv.js",
     "import-url": "node src/scripts/importUrl.js",
