@@ -19,10 +19,10 @@ npm i @ptrumpis/snap-lens-web-crawler
 ```
 
 ### JavaScript
-Uncomment code examples in `src/index.js` and run `npm start` to get started.
 
+Example:
 ```javascript
-import LensWebCrawler from "./src/crawler.js";
+import LensWebCrawler from "@ptrumpis/snap-lens-web-crawler/crawler";
 
 const crawler = new LensWebCrawler();
 
