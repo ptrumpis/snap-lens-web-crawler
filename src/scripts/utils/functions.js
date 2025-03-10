@@ -277,7 +277,7 @@ async function crawlLenses(lenses, { retryBrokenDownloads = false, overwriteExis
                     // print warning for missing lens urls
                     console.warn(`[Incomplete] URL missing for lens: ${lensInfo.uuid}`);
 
-                    if (lensInfo.lens_id) {
+                    if (lensInfo.lens_id && lensInfo.has_archived_snapshots === false) {
                         const downloadUrl = await relayServer.getDownloadUrl(lensInfo.lens_id);
                         if (downloadUrl) {
                             console.log(`[Downloading] ${downloadUrl}`);
