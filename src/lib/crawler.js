@@ -367,7 +367,7 @@ class SnapLensWebCrawler {
 
         try {
             while (!shouldLimit || lenses.length < maxLenses) {
-                const pageProps = await this.#crawlJsonFromUrl(currentUrl.toString(), "props.pageProps");
+                const pageProps = await this.#crawlJsonFromUrl(currentUrl.toString(), "props.pageProps", { retryNotFound: true });
                 if (!pageProps?.topLenses) {
                     break;
                 }
@@ -450,14 +450,14 @@ class SnapLensWebCrawler {
         }
     }
 
-    async #crawlJsonFromUrl(url, jsonPropertyPath) {
+    async #crawlJsonFromUrl(url, jsonPropertyPath, options = {}) {
         const jsonObj = this.#getJsonCache(url);
         if (typeof jsonObj !== 'undefined') {
             return this.#getProperty(jsonObj, jsonPropertyPath, url);
         }
 
         try {
-            const body = await this.#loadUrl(url);
+            const body = await this.#loadUrl(url, options);
             if (body instanceof CrawlerFailure) {
                 return body;
             }
@@ -497,14 +497,14 @@ class SnapLensWebCrawler {
         }
     }
 
-    async #getJsonFromUrl(url, jsonPropertyPath) {
+    async #getJsonFromUrl(url, jsonPropertyPath, options = {}) {
         const jsonObj = this.#getJsonCache(url);
         if (typeof jsonObj !== 'undefined') {
             return this.#getProperty(jsonObj, jsonPropertyPath, url);
         }
 
         try {
-            const jsonString = await this.#loadUrl(url);
+            const jsonString = await this.#loadUrl(url, options);
             if (jsonString instanceof CrawlerFailure) {
                 return jsonString;
             }
@@ -573,7 +573,7 @@ class SnapLensWebCrawler {
         }
     }
 
-    async #request(url, method = 'GET', options = {}) {
+    async #request(url, method = 'GET', { retryNotFound = false, retryFailed = true, retryTimeout = true, retryError = true } = {}) {
         const maxAttempts = this.#maxRequestRetries + 1;
         let attempt = 1;
         let hostname = null;
@@ -604,21 +604,41 @@ class SnapLensWebCrawler {
 
                 throw new HTTPStatusError(response?.status);
             } catch (e) {
+                const retryStatus = `(${attempt}/${maxAttempts})`;
                 if (e instanceof HTTPStatusError) {
                     if (e.code == 404) {
-                        console.error(`[Not Found]: ${url} - ${e.message}`);
                         crawlerFailure = new CrawlerNotFoundFailure(e.message, e.code, url, crawlerFailure);
-                        break; // do not retry 404
+                        if (retryNotFound === true) {
+                            console.error(`[Not Found] ${retryStatus} ${url} - ${e.message}`);
+                        } else {
+                            console.error(`[Not Found] ${url} - ${e.message}`);
+                            break;
+                        }
                     } else {
-                        console.error(`[Failed] (${attempt}/${maxAttempts}): ${url} - ${e.message}`);
                         crawlerFailure = new CrawlerHTTPStatusFailure(e.message, e.code, url, crawlerFailure);
+                        if (retryFailed === true) {
+                            console.error(`[Failed] ${retryStatus} ${url} - ${e.message}`);
+                        } else {
+                            console.error(`[Failed] ${url} - ${e.message}`);
+                            break;
+                        }
                     }
                 } else if (e.name === 'AbortError') {
-                    console.error(`[Timeout] (${attempt}/${maxAttempts}): ${url}`);
                     crawlerFailure = new CrawlerRequestTimeoutFailure(e.message, url, crawlerFailure);
+                    if (retryTimeout === true) {
+                        console.error(`[Timeout] ${retryStatus} ${url}`);
+                    } else {
+                        console.error(`[Timeout] ${url}`);
+                        break;
+                    }
                 } else {
-                    console.error(`[Error] (${attempt}/${maxAttempts}): ${url} - ${e.message}`);
                     crawlerFailure = new CrawlerRequestErrorFailure(e.message, url, crawlerFailure);
+                    if (retryError === true) {
+                        console.error(`[Error] ${retryStatus} ${url} - ${e.message}`);
+                    } else {
+                        console.error(`[Error] ${url} - ${e.message}`);
+                        break;
+                    }
                 }
             } finally {
                 clearTimeout(timeout);
