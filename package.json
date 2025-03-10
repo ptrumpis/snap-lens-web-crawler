@@ -19,6 +19,10 @@
     "./crawler": {
       "import": "./src/lib/crawler.js",
       "default": "./src/lib/crawler.js"
+    },
+    "./failure": {
+      "import": "./src/lib/failure.js",
+      "default": "./src/lib/failure.js"
     }
   },
   "type": "module",
