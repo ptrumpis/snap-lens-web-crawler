@@ -198,11 +198,13 @@ class SnapLensWebCrawler {
         for (let offset = 0; offset < maxLenses; offset += 100) {
             const limit = Math.min(maxLenses - offset, 100);
             const result = await this.#getLensesByCreator(obfuscatedSlug, offset, limit);
-            if (!(result instanceof CrawlerFailure)) {
-                lenses.push(...result);
-                if (result.length < 100) {
-                    break;
-                }
+            if (result instanceof CrawlerFailure) {
+                break;
+            }
+
+            lenses.push(...result);
+            if (result.length < 100) {
+                break;
             }
         }
 
@@ -346,7 +348,7 @@ class SnapLensWebCrawler {
         const url = `https://lensstudio.snapchat.com/v1/creator/lenses/?limit=${maxLenses}&offset=${offset}&order=1&slug=${obfuscatedSlug}`;
 
         try {
-            const lensesList = await this.#getJsonFromUrl(url, "lensesList");
+            const lensesList = await this.#getJsonFromUrl(url, "lensesList", { retryNotFound: true });
             if (lensesList instanceof CrawlerFailure) {
                 return lensesList;
             }
