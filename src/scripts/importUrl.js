@@ -42,7 +42,6 @@ try {
                         console.log(`[Finished] ${lenses.length} Lenses from URL: ${url}`);
                         console.log(`-----`);
                     }
-
                 } catch (e) {
                     console.error(e);
                 }

@@ -4,8 +4,11 @@ import fs from 'fs/promises';
 import path from 'path';
 import { createReadStream } from 'fs';
 import { pipeline } from 'stream/promises';
+import RelayServer from '../../lib/relay.js';
 import SnapLensWebCrawler from "../../lib/crawler.js";
+import { CrawlerFailure, CrawlerNotFoundFailure } from '../../lib/failure.js';
 
+const relayServer = new RelayServer();
 const defaultCrawler = new SnapLensWebCrawler();
 
 const boltBasePath = "./output/bolts/";
@@ -63,7 +66,8 @@ function getLensInfoTemplate() {
         signature: "",
         sha256: "",
         last_updated: "",
-        is_mirrored: ""
+        is_mirrored: "",
+        is_download_broken: ""
     });
 }
 
@@ -76,7 +80,7 @@ function isLensInfoMissing(lensInfo) {
     return (isLensIdMissing || isLensNameMissing || isUserNameMissing || isCreatorTagsMissing);
 }
 
-async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteExistingData = false, saveIncompleteLensInfo = false, crawler = null, resolvedLensCache = new Map() } = {}) {
+async function crawlLenses(lenses, { retryBrokenDownloads = false, overwriteExistingBolts = false, overwriteExistingData = false, saveIncompleteLensInfo = false, crawler = null, resolvedLensCache = new Map() } = {}) {
     if (!(crawler instanceof SnapLensWebCrawler)) {
         crawler = defaultCrawler;
     }
@@ -99,6 +103,9 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                 let existingLensInfo = {};
                 try {
                     const data = await fs.readFile(infoFilePath, 'utf8');
+                    const lensUrl = lensInfo.lens_url;
+                    const lensSig = lensInfo.signature;
+                    const lastUpdated = lensInfo.last_updated;
 
                     existingLensInfo = JSON.parse(data);
                     if (existingLensInfo) {
@@ -109,6 +116,18 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                             // keep existing data and add missing information only
                             lensInfo = crawler.mergeLensItems(existingLensInfo, lensInfo);
                             lensInfo.uuid = lensInfo.uuid.toLowerCase();
+                        }
+
+                        // force lens url update if previous url has not been mirrored
+                        if (existingLensInfo.lens_url && lensUrl && existingLensInfo.lens_url !== lensUrl && existingLensInfo.is_mirrored !== true) {
+                            console.info(`[URL Replace] Replacing URL for Lens: ${lensInfo.uuid}`);
+
+                            lensInfo.lens_url = lensUrl;
+                            lensInfo.signature = lensSig || existingLensInfo.signature || "";
+                            lensInfo.last_updated = lastUpdated || existingLensInfo.last_updated || "";
+                            lensInfo.sha256 = "";
+                            lensInfo.is_mirrored = "";
+                            lensInfo.is_download_broken = "";
                         }
                     }
                 } catch (err) {
@@ -123,7 +142,7 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                     console.log(`[Crawling] https://lens.snapchat.com/${lensInfo.uuid}`);
 
                     const liveLensInfo = await crawler.getLensByHash(lensInfo.uuid);
-                    if (liveLensInfo) {
+                    if (!(liveLensInfo instanceof CrawlerFailure)) {
                         lensInfo = crawler.mergeLensItems(lensInfo, liveLensInfo);
 
                         // mark search tags as non existing (prevent unecessary re-crawl)
@@ -139,11 +158,11 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                     console.log(`[Wayback Machine] Trying to find lens: ${lensInfo.uuid}`);
 
                     const archivedLensInfo = await crawler.getLensByArchivedSnapshot(lensInfo.uuid);
-                    if (archivedLensInfo) {
+                    if (!(archivedLensInfo instanceof CrawlerFailure)) {
                         lensInfo = crawler.mergeLensItems(lensInfo, archivedLensInfo);
 
                         // mark the non-existence of archived snapshots (prevent unecessary re-crawl)
-                        if (!archivedLensInfo.lens_url && archivedLensInfo.archived_snapshot_failures === 0) {
+                        if (!archivedLensInfo.lens_url && archivedLensInfo.archived_snapshot_failures.length === 0) {
                             lensInfo.has_archived_snapshots = false;
                         } else if (archivedLensInfo.snapshot) {
                             console.log(`[Found Snapshot] ${archivedLensInfo.uuid} - ${archivedLensInfo.snapshot.date}`);
@@ -180,9 +199,10 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                 }
 
                 // download and write lens bolt to file and generate a checksum and signature file
-                if (lensInfo.lens_url && (!lensInfo.is_mirrored || overwriteExistingBolts)) {
+                if (lensInfo.lens_url && (lensInfo.is_download_broken !== true || retryBrokenDownloads) && (!lensInfo.is_mirrored || overwriteExistingBolts)) {
                     const boltFolderPath = path.resolve(`${boltBasePath}${lensInfo.uuid}`);
                     const lensFilePath = path.join(boltFolderPath, "lens.lns");
+                    const zipFilePath = path.join(boltFolderPath, "lens.zip");
                     const sha256FilePath = path.join(boltFolderPath, "lens.sha256");
                     const sigFilePath = path.join(boltFolderPath, "lens.sig");
 
@@ -200,11 +220,29 @@ async function crawlLenses(lenses, { overwriteExistingBolts = false, overwriteEx
                             console.log(`[Downloading] ${lensInfo.lens_url}`);
 
                             // actually download the lens bolt
-                            if (await crawler.downloadFile(lensInfo.lens_url, lensFilePath)) {
+                            const downloadResult = await crawler.downloadFile(lensInfo.lens_url, lensFilePath);
+                            if (downloadResult === true) {
                                 boltFileExists = true;
 
                                 // generate new file checksum
                                 lensInfo.sha256 = await generateSha256(lensFilePath);
+                            } else if (downloadResult instanceof CrawlerNotFoundFailure) {
+                                if (!boltFileExists) {
+                                    lensInfo.is_download_broken = true;
+                                }
+
+                                const downloadUrl = await relayServer.getDownloadUrl(lensInfo.lens_id);
+                                if (downloadUrl) {
+                                    console.log(`[Downloading] ${downloadUrl}`);
+
+                                    const downloadResult = await crawler.downloadFile(downloadUrl, zipFilePath);
+                                    if (downloadResult === true) {
+                                        boltFileExists = true;
+
+                                        // generate new file checksum
+                                        lensInfo.sha256 = await generateSha256(zipFilePath);
+                                    }
+                                }
                             }
                         } catch (e) {
                             console.error(e);
