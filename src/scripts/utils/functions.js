@@ -67,7 +67,6 @@ function getLensInfoTemplate() {
         sha256: "",
         last_updated: "",
         is_mirrored: "",
-        is_download_broken: ""
     });
 }
 
