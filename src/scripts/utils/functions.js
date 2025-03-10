@@ -59,6 +59,26 @@ async function generateSha256(filePath) {
     return crypto.createHash('sha256').update(data).digest('hex').toUpperCase();
 }
 
+async function writeSha256ToFile(lensInfo, filePath) {
+    if (lensInfo?.sha256) {
+        try {
+            await fs.writeFile(filePath, lensInfo.sha256, 'utf8');
+        } catch (e) {
+            console.error(e);
+        }
+    }
+}
+
+async function writeSignatureToFile(lensInfo, filePath) {
+    if (lensInfo?.signature) {
+        try {
+            await fs.writeFile(filePath, lensInfo.signature, 'utf8');
+        } catch (e) {
+            console.error(e);
+        }
+    }
+}
+
 function getLensInfoTemplate() {
     return Object.assign(defaultCrawler.formatLensItem({}), {
         lens_id: "",
@@ -198,13 +218,13 @@ async function crawlLenses(lenses, { retryBrokenDownloads = false, overwriteExis
                 }
 
                 // download and write lens bolt to file and generate a checksum and signature file
-                if (lensInfo.lens_url && (lensInfo.is_download_broken !== true || retryBrokenDownloads) && (!lensInfo.is_mirrored || overwriteExistingBolts)) {
-                    const boltFolderPath = path.resolve(`${boltBasePath}${lensInfo.uuid}`);
-                    const lensFilePath = path.join(boltFolderPath, "lens.lns");
-                    const zipFilePath = path.join(boltFolderPath, "lens.zip");
-                    const sha256FilePath = path.join(boltFolderPath, "lens.sha256");
-                    const sigFilePath = path.join(boltFolderPath, "lens.sig");
+                const boltFolderPath = path.resolve(`${boltBasePath}${lensInfo.uuid}`);
+                const lensFilePath = path.join(boltFolderPath, "lens.lns");
+                const zipFilePath = path.join(boltFolderPath, "lens.zip");
+                const sha256FilePath = path.join(boltFolderPath, "lens.sha256");
+                const sigFilePath = path.join(boltFolderPath, "lens.sig");
 
+                if (lensInfo.lens_url && (lensInfo.is_download_broken !== true || retryBrokenDownloads) && (!lensInfo.is_mirrored || overwriteExistingBolts)) {
                     let boltFileExists = false;
                     try {
                         // check if file was previously downloaded
@@ -222,8 +242,6 @@ async function crawlLenses(lenses, { retryBrokenDownloads = false, overwriteExis
                             const downloadResult = await crawler.downloadFile(lensInfo.lens_url, lensFilePath);
                             if (downloadResult === true) {
                                 boltFileExists = true;
-
-                                // generate new file checksum
                                 lensInfo.sha256 = await generateSha256(lensFilePath);
                             } else if (downloadResult instanceof CrawlerNotFoundFailure) {
                                 if (!boltFileExists) {
@@ -237,8 +255,6 @@ async function crawlLenses(lenses, { retryBrokenDownloads = false, overwriteExis
                                     const downloadResult = await crawler.downloadFile(downloadUrl, zipFilePath);
                                     if (downloadResult === true) {
                                         boltFileExists = true;
-
-                                        // generate new file checksum
                                         lensInfo.sha256 = await generateSha256(zipFilePath);
                                     }
                                 }
@@ -248,23 +264,8 @@ async function crawlLenses(lenses, { retryBrokenDownloads = false, overwriteExis
                         }
 
                         if (boltFileExists) {
-                            // write sha256 checksum to file
-                            if (lensInfo.sha256) {
-                                try {
-                                    await fs.writeFile(sha256FilePath, lensInfo.sha256, 'utf8');
-                                } catch (e) {
-                                    console.error(e);
-                                }
-                            }
-
-                            // write signature to file
-                            if (lensInfo.signature) {
-                                try {
-                                    await fs.writeFile(sigFilePath, lensInfo.signature, 'utf8');
-                                } catch (e) {
-                                    console.error(e);
-                                }
-                            }
+                            await writeSha256ToFile(lensInfo, sha256FilePath);
+                            await writeSignatureToFile(lensInfo, sigFilePath);
                         }
                     }
 
@@ -275,10 +276,25 @@ async function crawlLenses(lenses, { retryBrokenDownloads = false, overwriteExis
 
                     // print warning for missing lens urls
                     console.warn(`[Incomplete] URL missing for lens: ${lensInfo.uuid}`);
+
+                    if (lensInfo.lens_id) {
+                        const downloadUrl = await relayServer.getDownloadUrl(lensInfo.lens_id);
+                        if (downloadUrl) {
+                            console.log(`[Downloading] ${downloadUrl}`);
+
+                            const downloadResult = await crawler.downloadFile(downloadUrl, zipFilePath);
+                            if (downloadResult === true) {
+                                lensInfo.is_mirrored = true;
+                                lensInfo.sha256 = await generateSha256(zipFilePath);
+                                await writeSha256ToFile(lensInfo, sha256FilePath);
+                                await writeSignatureToFile(lensInfo, sigFilePath);
+                            }
+                        }
+                    }
                 }
 
                 // write lens info to json file
-                if (lensInfo.lens_url || saveIncompleteLensInfo) {
+                if (lensInfo.lens_url || lensInfo.is_mirrored || saveIncompleteLensInfo) {
                     try {
                         // use template to create uniform property order
                         lensInfo = crawler.mergeLensItems(lensInfo, getLensInfoTemplate());
