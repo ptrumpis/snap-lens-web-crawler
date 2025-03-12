@@ -37,22 +37,22 @@ class SnapLensWebCrawler {
 
     constructor({
         connectionTimeoutMs = 9000,
-        minRequestDelayMs = 500,
+        minRequestDelayMs = 100,
         cacheTTL = 3600,
         gcInterval = 3600,
         failedRequestDelayMs = 4500,
         maxRequestRetries = 2,
-        headers = null
+        headers = undefined
     } = {}) {
         this.#connectionTimeoutMs = Math.max(connectionTimeoutMs, 1000);
-        this.#minRequestDelayMs = Math.max(minRequestDelayMs, 100);
+        this.#minRequestDelayMs = Math.max(minRequestDelayMs, 0);
         this.#failedRequestDelayMs = Math.max(failedRequestDelayMs, this.#minRequestDelayMs);
         this.#maxRequestRetries = Math.max(maxRequestRetries, 0);
         this.#headers = headers || {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'
         };
 
-        this.#cacheTTL = cacheTTL ? Math.max(parseInt(cacheTTL) * 1000, 60 * 1000) : 0;
+        this.#cacheTTL = cacheTTL ? Math.max(parseInt(cacheTTL) * 1000, 1000) : 0;
         this.#gcInterval = Math.max(parseInt(gcInterval) * 1000, 5 * 60 * 1000);
 
         this.#cleanupInterval = setInterval(() => { this.#cleanupCache() }, this.#gcInterval).unref();
