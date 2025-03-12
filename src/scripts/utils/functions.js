@@ -59,20 +59,20 @@ async function generateSha256(filePath) {
     return crypto.createHash('sha256').update(data).digest('hex').toUpperCase();
 }
 
-async function writeSha256ToFile(lensInfo, filePath) {
-    if (lensInfo?.sha256) {
+async function writeSha256ToFile(sha256, filePath) {
+    if (sha256) {
         try {
-            await fs.writeFile(filePath, lensInfo.sha256, 'utf8');
+            await fs.writeFile(filePath, sha256, 'utf8');
         } catch (e) {
             console.error(e);
         }
     }
 }
 
-async function writeSignatureToFile(lensInfo, filePath) {
-    if (lensInfo?.signature) {
+async function writeSignatureToFile(signature, filePath) {
+    if (signature) {
         try {
-            await fs.writeFile(filePath, lensInfo.signature, 'utf8');
+            await fs.writeFile(filePath, signature, 'utf8');
         } catch (e) {
             console.error(e);
         }
@@ -217,14 +217,22 @@ async function crawlLenses(lenses, { retryBrokenDownloads = false, overwriteExis
                     lensInfo.snapcode_url = crawler.snapcodeUrl(lensInfo.uuid);
                 }
 
+                if (!lensInfo.obfuscated_user_slug) {
+                    const lens = await relayServer.getLens(lensInfo.lens_id);
+                    if (lens && lens.obfuscated_user_slug) {
+                        lensInfo.obfuscated_user_slug = lens.obfuscated_user_slug;
+                    }
+                }
+
                 // download and write lens bolt to file and generate a checksum and signature file
                 const boltFolderPath = path.resolve(`${boltBasePath}${lensInfo.uuid}`);
                 const lensFilePath = path.join(boltFolderPath, "lens.lns");
                 const zipFilePath = path.join(boltFolderPath, "lens.zip");
-                const sha256FilePath = path.join(boltFolderPath, "lens.sha256");
-                const sigFilePath = path.join(boltFolderPath, "lens.sig");
 
-                if (lensInfo.lens_url && (lensInfo.is_download_broken !== true || retryBrokenDownloads) && (!lensInfo.is_mirrored || overwriteExistingBolts)) {
+                const mirroredDownloadCondition = (lensInfo.is_mirrored !== true || overwriteExistingBolts);
+                const brokenDownloadCondition = (lensInfo.is_download_broken !== true || retryBrokenDownloads);
+
+                if (lensInfo.lens_url && mirroredDownloadCondition && brokenDownloadCondition) {
                     let boltFileExists = false;
                     try {
                         // check if file was previously downloaded
@@ -245,18 +253,8 @@ async function crawlLenses(lenses, { retryBrokenDownloads = false, overwriteExis
                                 lensInfo.sha256 = await generateSha256(lensFilePath);
                             } else if (downloadResult instanceof CrawlerNotFoundFailure) {
                                 if (!boltFileExists) {
+                                    // prevent unecessary re-download attempts
                                     lensInfo.is_download_broken = true;
-                                }
-
-                                const downloadUrl = await relayServer.getDownloadUrl(lensInfo.lens_id);
-                                if (downloadUrl) {
-                                    console.log(`[Downloading] ${downloadUrl}`);
-
-                                    const downloadResult = await crawler.downloadFile(downloadUrl, zipFilePath);
-                                    if (downloadResult === true) {
-                                        boltFileExists = true;
-                                        lensInfo.sha256 = await generateSha256(zipFilePath);
-                                    }
                                 }
                             }
                         } catch (e) {
@@ -264,33 +262,41 @@ async function crawlLenses(lenses, { retryBrokenDownloads = false, overwriteExis
                         }
 
                         if (boltFileExists) {
-                            await writeSha256ToFile(lensInfo, sha256FilePath);
-                            await writeSignatureToFile(lensInfo, sigFilePath);
+                            await writeSha256ToFile(lensInfo.sha256, path.join(boltFolderPath, "lens.sha256"));
+                            await writeSignatureToFile(lensInfo.signature, path.join(boltFolderPath, "lens.sig"));
                         }
                     }
 
                     // prevent re-downloading
                     lensInfo.is_mirrored = boltFileExists;
-                } else if (!lensInfo.lens_url) {
-                    lensInfo.is_mirrored = false;
+                }
 
-                    // print warning for missing lens urls
-                    console.warn(`[Incomplete] URL missing for lens: ${lensInfo.uuid}`);
+                if (lensInfo.is_backed_up !== false) {
+                    const unlock = await relayServer.getUnlock(lensInfo.lens_id);
+                    if (unlock?.lens_url) {
+                        const downloadUrl = unlock?.lens_url;
 
-                    if (lensInfo.lens_id && lensInfo.has_archived_snapshots === false) {
-                        const downloadUrl = await relayServer.getDownloadUrl(lensInfo.lens_id);
-                        if (downloadUrl) {
-                            console.log(`[Downloading] ${downloadUrl}`);
+                        console.log(`[Downloading] ${downloadUrl}`);
 
-                            const downloadResult = await crawler.downloadFile(downloadUrl, zipFilePath);
-                            if (downloadResult === true) {
-                                lensInfo.is_mirrored = true;
-                                lensInfo.sha256 = await generateSha256(zipFilePath);
-                                await writeSha256ToFile(lensInfo, sha256FilePath);
-                                await writeSignatureToFile(lensInfo, sigFilePath);
-                            }
+                        const downloadResult = await crawler.downloadFile(downloadUrl, zipFilePath);
+                        if (downloadResult === true) {
+                            lensInfo.is_backed_up = true;
+                            lensInfo.is_mirrored = true;
+
+                            const sha256 = generateSha256(zipFilePath);
+                            const sig = unlock.signature;
+
+                            await writeSha256ToFile(sha256, path.join(boltFolderPath, "lens.original.sha256"));
+                            await writeSignatureToFile(sig, path.join(boltFolderPath, "lens.original.sig"));
+                        } else {
+                            lensInfo.is_backed_up = false;
                         }
                     }
+                }
+
+                if (!lensInfo.lens_url && lensInfo.is_mirrored !== true) {
+                    lensInfo.is_mirrored = false;
+                    console.warn(`[Incomplete] URL missing for lens: ${lensInfo.uuid}`);
                 }
 
                 // write lens info to json file
