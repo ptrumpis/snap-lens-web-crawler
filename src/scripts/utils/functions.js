@@ -281,7 +281,7 @@ async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloa
                             lensInfo.is_backed_up = true;
                             lensInfo.is_mirrored = true;
 
-                            const sha256 = generateSha256(zipFilePath);
+                            const sha256 = await generateSha256(zipFilePath);
                             const sig = unlock.signature;
 
                             await writeSha256ToFile(sha256, path.join(boltFolderPath, "lens.original.sha256"));
