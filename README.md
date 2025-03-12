@@ -10,7 +10,6 @@ JavaScript library to crawl and download Snap Lenses from *lens.snapchat.com* wi
 
 ## ⚠️ Requirements
 - cheerio
-- node-fetch
 
 ## 🚀 Usage
 ### npm
