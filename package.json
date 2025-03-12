@@ -26,6 +26,9 @@
     }
   },
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "crawl": "node src/scripts/crawl.js",
     "import-csv": "node src/scripts/importCsv.js",
@@ -42,8 +45,7 @@
   },
   "license": "GPL-3.0",
   "dependencies": {
-    "cheerio": "^1.0.0",
-    "node-fetch": "^3.3.2"
+    "cheerio": "^1.0.0"
   },
   "devDependencies": {
     "csv-parser": "^3.2.0"

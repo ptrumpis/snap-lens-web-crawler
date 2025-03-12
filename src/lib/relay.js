@@ -1,5 +1,3 @@
-import fetch from 'node-fetch';
-
 class RelayServer {
     #host;
     #timeoutMs;
@@ -8,17 +6,25 @@ class RelayServer {
     constructor(host = 'https://snapchatreverse.jaku.tv', timeoutMs = 6000) {
         this.#host = host;
         this.#timeoutMs = timeoutMs;
-        this.#headers = new Headers({
+        this.#headers = {
             'User-Agent': 'SnapCamera/1.21.0.0 (Windows 10 Version 2009)',
             'Content-Type': 'application/json',
             'X-Installation-Id': 'default'
-        });
+        };
     }
 
-    async getDownloadUrl(lensId) {
+    async getLens(lensId) {
+        const result = await this.#request(`/vc/v1/explorer/lenses`, 'POST', JSON.stringify({ 'lenses': [lensId] }));
+        if (result && result['lenses']) {
+            return result['lenses'];
+        }
+        return null;
+    }
+
+    async getUnlock(lensId) {
         const unlock = await this.#request(`/vc/v1/explorer/unlock?uid=${lensId}`);
         if (unlock && unlock.lens_id && unlock.lens_url) {
-            return unlock.lens_url;
+            return unlock;
         }
         return null;
     }
