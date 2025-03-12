@@ -559,7 +559,7 @@ class SnapLensWebCrawler {
         try {
             const now = Date.now();
 
-            if (this.#lastRequestTimestamps.has(hostname)) {
+            if (this.#minRequestDelayMs && this.#lastRequestTimestamps.has(hostname)) {
                 const lastRequestTime = this.#lastRequestTimestamps.get(hostname);
                 const elapsed = now - lastRequestTime;
                 if (elapsed < this.#minRequestDelayMs) {
@@ -594,7 +594,9 @@ class SnapLensWebCrawler {
             }, this.#connectionTimeoutMs);
 
             try {
-                this.#lastRequestTimestamps.set(hostname, Date.now());
+                if (this.#minRequestDelayMs) {
+                    this.#lastRequestTimestamps.set(hostname, Date.now());
+                }
 
                 const response = await fetch(url, { method: method, signal: controller.signal, headers: this.#headers });
                 clearTimeout(timeout);
@@ -655,10 +657,12 @@ class SnapLensWebCrawler {
     }
 
     #setJsonCache(url, jsonObj) {
-        this.#jsonCache.set(url, {
-            jsonObj: jsonObj,
-            timestamp: Date.now()
-        });
+        if (this.#cacheTTL) {
+            this.#jsonCache.set(url, {
+                jsonObj: jsonObj,
+                timestamp: Date.now()
+            });
+        }
     }
 
     #getJsonCache(url) {
@@ -679,15 +683,19 @@ class SnapLensWebCrawler {
     #cleanupCache() {
         const now = Date.now();
         try {
-            for (const [url, cacheEntry] of this.#jsonCache) {
-                if (now - cacheEntry.timestamp >= this.#cacheTTL) {
-                    this.#jsonCache.delete(url);
+            if (this.#cacheTTL) {
+                for (const [url, cacheEntry] of this.#jsonCache) {
+                    if (now - cacheEntry.timestamp >= this.#cacheTTL) {
+                        this.#jsonCache.delete(url);
+                    }
                 }
             }
 
-            for (const [hostname, timestamp] of this.#lastRequestTimestamps) {
-                if (now - timestamp >= this.#cacheTTL) {
-                    this.#lastRequestTimestamps.delete(hostname);
+            if (this.#minRequestDelayMs) {
+                for (const [hostname, timestamp] of this.#lastRequestTimestamps) {
+                    if (now - timestamp >= this.#minRequestDelayMs) {
+                        this.#lastRequestTimestamps.delete(hostname);
+                    }
                 }
             }
         } catch (e) {
