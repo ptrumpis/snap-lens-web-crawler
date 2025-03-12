@@ -99,7 +99,7 @@ function isLensInfoMissing(lensInfo) {
     return (isLensIdMissing || isLensNameMissing || isUserNameMissing || isCreatorTagsMissing);
 }
 
-async function crawlLenses(lenses, { retryBrokenDownloads = false, overwriteExistingBolts = false, overwriteExistingData = false, saveIncompleteLensInfo = false, crawler = null, resolvedLensCache = new Map() } = {}) {
+async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloads = false, overwriteExistingBolts = false, overwriteExistingData = false, saveIncompleteLensInfo = false, crawler = null, resolvedLensCache = new Map() } = {}) {
     if (!(crawler instanceof SnapLensWebCrawler)) {
         crawler = defaultCrawler;
     }
@@ -217,7 +217,7 @@ async function crawlLenses(lenses, { retryBrokenDownloads = false, overwriteExis
                     lensInfo.snapcode_url = crawler.snapcodeUrl(lensInfo.uuid);
                 }
 
-                if (!lensInfo.obfuscated_user_slug) {
+                if (!lensInfo.obfuscated_user_slug && queryRelayServer) {
                     const lens = await relayServer.getLens(lensInfo.lens_id);
                     if (lens && lens.obfuscated_user_slug) {
                         lensInfo.obfuscated_user_slug = lens.obfuscated_user_slug;
@@ -240,8 +240,6 @@ async function crawlLenses(lenses, { retryBrokenDownloads = false, overwriteExis
                         boltFileExists = true;
                     } catch { }
 
-                    // check if file is does not exist
-                    // otherwise overwrite existing file if flag is set
                     if (!boltFileExists || overwriteExistingBolts) {
                         try {
                             console.log(`[Downloading] ${lensInfo.lens_url}`);
@@ -271,7 +269,7 @@ async function crawlLenses(lenses, { retryBrokenDownloads = false, overwriteExis
                     lensInfo.is_mirrored = boltFileExists;
                 }
 
-                if (lensInfo.is_backed_up !== false) {
+                if (lensInfo.is_backed_up !== false && queryRelayServer) {
                     const unlock = await relayServer.getUnlock(lensInfo.lens_id);
                     if (unlock?.lens_url) {
                         const downloadUrl = unlock?.lens_url;
