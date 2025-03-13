@@ -50,15 +50,28 @@ class CrawlerNotFoundFailure extends CrawlerHTTPStatusFailure {
     // HTTP status 404 received
 }
 
-export { CrawlerFailure };
-export { CrawlerInvalidUrlFailure };
-export { CrawlerJsonFailure };
-export { CrawlerJsonParseFailure };
-export { CrawlerJsonStructureFailure };
-export { CrawlerRequestFailure };
-export { CrawlerRequestErrorFailure };
-export { CrawlerRequestTimeoutFailure };
-export { CrawlerHTTPStatusFailure };
-export { CrawlerNotFoundFailure };
+export {
+    CrawlerFailure,
+    CrawlerInvalidUrlFailure,
+    CrawlerJsonFailure,
+    CrawlerJsonParseFailure,
+    CrawlerJsonStructureFailure,
+    CrawlerRequestFailure,
+    CrawlerRequestErrorFailure,
+    CrawlerRequestTimeoutFailure,
+    CrawlerHTTPStatusFailure,
+    CrawlerNotFoundFailure
+}
 
-export default { CrawlerFailure, CrawlerInvalidUrlFailure, CrawlerJsonFailure, CrawlerJsonParseFailure, CrawlerJsonStructureFailure, CrawlerRequestFailure, CrawlerRequestErrorFailure, CrawlerRequestTimeoutFailure, CrawlerHTTPStatusFailure, CrawlerNotFoundFailure };
+export default {
+    CrawlerFailure,
+    CrawlerInvalidUrlFailure,
+    CrawlerJsonFailure,
+    CrawlerJsonParseFailure,
+    CrawlerJsonStructureFailure,
+    CrawlerRequestFailure,
+    CrawlerRequestErrorFailure,
+    CrawlerRequestTimeoutFailure,
+    CrawlerHTTPStatusFailure,
+    CrawlerNotFoundFailure
+};
