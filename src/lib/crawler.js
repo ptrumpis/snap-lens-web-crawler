@@ -134,6 +134,8 @@ class SnapLensWebCrawler {
             thumbnail_media_poster_url: lensItem.thumbnailUrl || lensItem.previewImageUrl || lensItem.lensPreviewImageUrl || "",
             standard_media_url: lensItem.previewVideoUrl || lensItem.lensPreviewVideoUrl || "",
             image_sequence: {},
+            hint_id: "",
+            additional_hint_ids: {}
         };
 
         if (lensItem.thumbnailSequence) {
