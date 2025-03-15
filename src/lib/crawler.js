@@ -138,7 +138,7 @@ class SnapLensWebCrawler {
             additional_hint_ids: {}
         };
 
-        if (lensItem.thumbnailSequence) {
+        if (lensItem.thumbnailSequence && typeof lensItem.thumbnailSequence === 'object' && Object.keys(lensItem.thumbnailSequence).length) {
             result.image_sequence = {
                 url_pattern: lensItem.thumbnailSequence?.urlPattern || "",
                 size: lensItem.thumbnailSequence?.numThumbnails || 0,
@@ -155,6 +155,10 @@ class SnapLensWebCrawler {
                 sha256: lensItem.lensResource?.checkSum || "",
                 last_updated: lensItem.lensResource?.lastUpdated || ""
             });
+
+            if (result.lastUpdated) {
+                result.lastUpdated = this.#normalizeTimestamp(result.lastUpdated);
+            }
         }
 
         return result;
@@ -717,6 +721,10 @@ class SnapLensWebCrawler {
         } catch (e) { }
 
         return '';
+    }
+
+    #normalizeTimestamp(ts) {
+        return ts < 1e12 ? ts * 1000 : ts;
     }
 
     #archiveTimestampToDateString(YYYYMMDDhhmmss) {
