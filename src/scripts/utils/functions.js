@@ -111,8 +111,6 @@ async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloa
                 const infoFolderPath = path.resolve(`${infoBasePath}${lensInfo.uuid}`);
                 const infoFilePath = path.join(infoFolderPath, "lens.json");
 
-                await fs.mkdir(infoFolderPath, { recursive: true });
-
                 // read existing lens info from file
                 let existingLensInfo = {};
                 try {
@@ -237,13 +235,14 @@ async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloa
                         boltFileExists = true;
                     } catch { }
 
-                    if (mirrorDownloadCondition) {
+                    if ((!boltFileExists && lensInfo.is_mirrored !== true) || overwriteExistingBolts) {
                         console.log(`[Downloading] ${lensInfo.lens_url}`);
 
                         // actually download the lens bolt
                         const downloadResult = await crawler.downloadFile(lensInfo.lens_url, lensFilePath);
                         if (downloadResult === true) {
                             boltFileExists = true;
+                            delete lensInfo.is_download_broken;
                         } else if (downloadResult instanceof CrawlerNotFoundFailure && !boltFileExists) {
                             // prevent unecessary re-download attempts
                             lensInfo.is_download_broken = true;
@@ -313,6 +312,7 @@ async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloa
                                 console.log(`[Lens.json] Updating existing info file: ${lensInfo.uuid}`);
                             }
 
+                            await fs.mkdir(infoFolderPath, { recursive: true });
                             await fs.writeFile(infoFilePath, JSON.stringify(lensInfo, null, 2), 'utf8');
                         }
                     } catch (err) {
