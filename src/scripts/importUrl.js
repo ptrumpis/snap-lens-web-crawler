@@ -3,11 +3,6 @@ import * as Utils from "./utils/functions.js";
 import process from 'process';
 
 const crawler = new SnapLensWebCrawler({ cacheTTL: 86400, maxRequestRetries: 2 });
-
-const overwriteExistingBolts = false;
-const overwriteExistingData = false;
-const saveIncompleteLensInfo = false;
-
 const resolvedLensCache = new Map();
 
 const urlRegex = /^(https?:\/\/)[^\s/$.?#].[^\s]*$/i;
@@ -19,9 +14,12 @@ if (!inputFile) {
 }
 
 try {
-    const lines = await Utils.readTextFile(inputFile);
+    let lines = await Utils.readTextFile(inputFile);
     if (lines && lines.length) {
-        const urls = lines.filter(line => urlRegex.test(line));
+        let urls = lines.filter(line => urlRegex.test(line));
+
+        lines.length = 0;
+        lines = null;
 
         if (urls && urls.length) {
             console.log(`[Import URL] Importing ${urls.length} URL's from text file: '${inputFile}'`);
@@ -33,23 +31,34 @@ try {
                 try {
                     console.log(`[Fetching] URL (${n}/${urls.length}): ${url}`);
 
-                    const lenses = await crawler.getLensesFromUrl(url);
+                    let lenses = await crawler.getLensesFromUrl(url);
                     if (lenses && lenses.length) {
                         console.log(`[Resolving] ${lenses.length} Lenses from URL: ${url}`);
 
-                        await Utils.crawlLenses(lenses, { crawler, resolvedLensCache, overwriteExistingBolts, overwriteExistingData, saveIncompleteLensInfo });
+                        await Utils.crawlLenses(lenses, { crawler, resolvedLensCache });
 
                         console.log(`[Finished] ${lenses.length} Lenses from URL: ${url}`);
                         console.log(`-----`);
+
+                        lenses.length = 0;
+                        lenses = null;
                     }
                 } catch (e) {
                     console.error(e);
                 }
+
+                if (n % 1000 === 0 && global.gc) {
+                    global.gc();
+                }
             }
+
+            urls.length = 0;
+            urls = null;
         }
     }
 } catch (e) {
     console.error(e);
 }
 
+resolvedLensCache.clear();
 crawler.destroy();

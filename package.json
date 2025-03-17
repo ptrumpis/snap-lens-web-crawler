@@ -30,9 +30,9 @@
     "node": ">=18"
   },
   "scripts": {
-    "crawl": "node src/scripts/crawl.js",
-    "import-csv": "node src/scripts/importCsv.js",
-    "import-url": "node src/scripts/importUrl.js",
+    "crawl": "node --expose-gc src/scripts/crawl.js",
+    "import-csv": "node --expose-gc src/scripts/importCsv.js",
+    "import-url": "node --expose-gc src/scripts/importUrl.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Patrick Trumpis <ptrumpis@pm.me>",
