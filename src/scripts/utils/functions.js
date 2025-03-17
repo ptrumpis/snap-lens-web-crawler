@@ -9,7 +9,6 @@ import SnapLensWebCrawler from "../../lib/crawler.js";
 import { CrawlerFailure, CrawlerNotFoundFailure } from '../../lib/failure.js';
 
 const relayServer = new RelayServer();
-const defaultCrawler = new SnapLensWebCrawler();
 
 const boltBasePath = "./output/bolts/";
 const infoBasePath = "./output/info/";
@@ -74,8 +73,8 @@ async function writeValueToFile(value, filePath) {
     }
 }
 
-function getLensInfoTemplate() {
-    return Object.assign(defaultCrawler.formatLensItem({}), {
+function getLensInfoTemplate(crawler) {
+    return Object.assign(crawler.formatLensItem({}), {
         lens_id: "",
         lens_url: "",
         signature: "",
@@ -94,9 +93,18 @@ function isLensInfoMissing(lensInfo) {
     return (isLensIdMissing || isLensNameMissing || isUserNameMissing || isCreatorTagsMissing);
 }
 
-async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloads = false, overwriteExistingBolts = false, overwriteExistingData = false, saveIncompleteLensInfo = false, crawler = null, resolvedLensCache = new Map() } = {}) {
+async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloads = false, overwriteExistingBolts = false, overwriteExistingData = false, saveIncompleteLensInfo = false, crawler = null, resolvedLensCache = null } = {}) {
+    let destroyCrawler = false;
+    let clearResolvedCache = false;
+
     if (!(crawler instanceof SnapLensWebCrawler)) {
-        crawler = defaultCrawler;
+        crawler = new SnapLensWebCrawler({ cacheTTL: 86400, maxRequestRetries: 2 });
+        destroyCrawler = true;
+    }
+
+    if (!(resolvedLensCache instanceof Map)) {
+        resolvedLensCache = new Map();
+        clearResolvedCache = true;
     }
 
     for (let lensInfo of lenses) {
@@ -303,7 +311,7 @@ async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloa
                 if (lensInfo.lens_url || lensInfo.is_mirrored || lensInfo.is_backed_up || saveIncompleteLensInfo) {
                     try {
                         // use template to create uniform property order
-                        lensInfo = crawler.mergeLensItems(lensInfo, getLensInfoTemplate());
+                        lensInfo = crawler.mergeLensItems(lensInfo, getLensInfoTemplate(crawler));
 
                         if (JSON.stringify(lensInfo) !== JSON.stringify(existingLensInfo)) {
                             if (Object.keys(existingLensInfo).length === 0) {
@@ -331,6 +339,20 @@ async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloa
         } catch (e) {
             console.error(`Error trying to process lens: ${lensInfo.uuid}`, e);
         }
+
+        lensInfo = null;
+    }
+
+    lenses = null;
+
+    if (destroyCrawler) {
+        crawler.destroy();
+        crawler = null;
+    }
+
+    if (clearResolvedCache) {
+        resolvedLensCache.clear();
+        resolvedLensCache = null;
     }
 }
 
