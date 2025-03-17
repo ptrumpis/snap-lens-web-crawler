@@ -281,19 +281,20 @@ async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloa
                         zipFileExists = true;
                     } catch { }
 
-                    if (!lensInfo.lens_backup_url || !lensInfo.lens_original_signature || !lensInfo.lens_original_sha256) {
+                    if (!lensInfo.lens_backup_url || !lensInfo.lens_original_signature || !lensInfo.is_backed_up) {
                         const unlock = await relayServer.getUnlock(lensInfo.lens_id);
-                        if (unlock?.lens_url) {
+                        if (unlock) {
+                            lensInfo.lens_backup_url = unlock.lens_url || "";
+                            lensInfo.lens_original_signature = unlock.signature || "";
                             lensInfo.hint_id = unlock.hint_id || "";
                             lensInfo.additional_hint_ids = unlock.additional_hint_ids || {};
 
-                            lensInfo.lens_backup_url = unlock.lens_url;
-                            lensInfo.lens_original_signature = unlock.signature || "";
+                            if (unlock.lens_url) {
+                                console.log(`[Downloading] ${unlock.lens_url}`);
 
-                            console.log(`[Downloading] ${lensInfo.lens_backup_url}`);
-
-                            if (!zipFileExists && !lensInfo.is_backed_up && await crawler.downloadFile(lensInfo.lens_backup_url, zipFilePath) === true) {
-                                zipFileExists = true;
+                                if (!zipFileExists && !lensInfo.is_backed_up && await crawler.downloadFile(unlock.lens_url, zipFilePath) === true) {
+                                    zipFileExists = true;
+                                }
                             }
                         }
                     }
