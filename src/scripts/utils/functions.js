@@ -73,8 +73,8 @@ async function writeValueToFile(value, filePath) {
     }
 }
 
-function getLensInfoTemplate(crawler) {
-    return Object.assign(crawler.formatLensItem({}), {
+function getLensInfoTemplate() {
+    return Object.assign(SnapLensWebCrawler.formatLensItem({}), {
         lens_id: "",
         lens_url: "",
         signature: "",
@@ -131,10 +131,10 @@ async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloa
                     if (existingLensInfo) {
                         if (overwriteExistingData) {
                             // keep latest information and overwrite existing data 
-                            lensInfo = crawler.mergeLensItems(lensInfo, existingLensInfo);
+                            lensInfo = SnapLensWebCrawler.mergeLensItems(lensInfo, existingLensInfo);
                         } else {
                             // keep existing data and add missing information only
-                            lensInfo = crawler.mergeLensItems(existingLensInfo, lensInfo);
+                            lensInfo = SnapLensWebCrawler.mergeLensItems(existingLensInfo, lensInfo);
                             lensInfo.uuid = lensInfo.uuid.toLowerCase();
                         }
 
@@ -163,7 +163,7 @@ async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloa
 
                     const liveLensInfo = await crawler.getLensByHash(lensInfo.uuid);
                     if (!(liveLensInfo instanceof CrawlerFailure)) {
-                        lensInfo = crawler.mergeLensItems(lensInfo, liveLensInfo);
+                        lensInfo = SnapLensWebCrawler.mergeLensItems(lensInfo, liveLensInfo);
 
                         // mark search tags as non existing (prevent unecessary re-crawl)
                         if (lensInfo.lens_creator_search_tags.length === 0) {
@@ -179,7 +179,7 @@ async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloa
 
                     const archivedLensInfo = await crawler.getLensByArchivedSnapshot(lensInfo.uuid);
                     if (!(archivedLensInfo instanceof CrawlerFailure)) {
-                        lensInfo = crawler.mergeLensItems(lensInfo, archivedLensInfo);
+                        lensInfo = SnapLensWebCrawler.mergeLensItems(lensInfo, archivedLensInfo);
 
                         // mark the non-existence of archived snapshots (prevent unecessary re-crawl)
                         if (!archivedLensInfo.lens_url && archivedLensInfo.archived_snapshot_failures.length === 0) {
@@ -211,12 +211,12 @@ async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloa
 
                 // unlock URL can be set manually
                 if (!lensInfo.deeplink) {
-                    lensInfo.deeplink = crawler.deeplinkUrl(lensInfo.uuid);
+                    lensInfo.deeplink = SnapLensWebCrawler.deeplinkUrl(lensInfo.uuid);
                 }
 
                 // snapcode URL can be set manually
                 if (!lensInfo.snapcode_url) {
-                    lensInfo.snapcode_url = crawler.snapcodeUrl(lensInfo.uuid);
+                    lensInfo.snapcode_url = SnapLensWebCrawler.snapcodeUrl(lensInfo.uuid);
                 }
 
                 // try to obtain rare creator slug
@@ -311,7 +311,7 @@ async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloa
                 if (lensInfo.lens_url || lensInfo.is_mirrored || lensInfo.is_backed_up || saveIncompleteLensInfo) {
                     try {
                         // use template to create uniform property order
-                        lensInfo = crawler.mergeLensItems(lensInfo, getLensInfoTemplate(crawler));
+                        lensInfo = SnapLensWebCrawler.mergeLensItems(lensInfo, getLensInfoTemplate());
 
                         if (JSON.stringify(lensInfo) !== JSON.stringify(existingLensInfo)) {
                             if (Object.keys(existingLensInfo).length === 0) {

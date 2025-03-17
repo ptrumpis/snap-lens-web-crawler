@@ -86,7 +86,7 @@ class SnapLensWebCrawler {
         return false;
     }
 
-    mergeLensItems(item1, item2) {
+    static mergeLensItems(item1, item2) {
         function isEmpty(value) {
             return (!value && value !== false) ||
                 (Array.isArray(value) && value.length === 0) ||
@@ -104,19 +104,19 @@ class SnapLensWebCrawler {
         return merged;
     }
 
-    formatLensItem(lensItem, options = {}) {
+    static formatLensItem(lensItem, options = {}) {
         const { obfuscatedSlug = '', userName = '', hash = '', unlockableId = '' } = options;
 
         const deeplinkUrl = lensItem.deeplinkUrl || lensItem.unlockUrl || "";
-        const uuid = lensItem.scannableUuid || this.#extractUuidFromDeeplink(deeplinkUrl) || hash || "";
+        const uuid = lensItem.scannableUuid || SnapLensWebCrawler.extractUuidFromDeeplink(deeplinkUrl) || hash || "";
         const lensId = lensItem.lensId || lensItem.id || unlockableId || "";
 
         let result = {
             //lens
             unlockable_id: lensId,
             uuid: uuid,
-            deeplink: deeplinkUrl || this.deeplinkUrl(uuid) || "",
-            snapcode_url: lensItem.snapcodeUrl || this.snapcodeUrl(uuid) || "",
+            deeplink: deeplinkUrl || SnapLensWebCrawler.deeplinkUrl(uuid) || "",
+            snapcode_url: lensItem.snapcodeUrl || SnapLensWebCrawler.snapcodeUrl(uuid) || "",
 
             lens_name: lensItem.lensName || lensItem.name || "",
             lens_creator_search_tags: lensItem.lensCreatorSearchTags || [],
@@ -124,7 +124,7 @@ class SnapLensWebCrawler {
 
             user_display_name: lensItem.lensCreatorDisplayName || lensItem.creator?.title || lensItem.creatorName || "",
             user_name: lensItem.lensCreatorUsername || userName || "",
-            user_profile_url: lensItem.userProfileUrl || this.profileUrl(lensItem.lensCreatorUsername || userName) || "",
+            user_profile_url: lensItem.userProfileUrl || SnapLensWebCrawler.profileUrl(lensItem.lensCreatorUsername || userName) || "",
             user_id: lensItem.creatorUserId || "",
             user_profile_id: lensItem.creatorProfileId || "",
             obfuscated_user_slug: obfuscatedSlug || "",
@@ -157,32 +157,50 @@ class SnapLensWebCrawler {
             });
 
             if (result.lastUpdated) {
-                result.lastUpdated = this.#normalizeTimestamp(result.lastUpdated);
+                result.lastUpdated = SnapLensWebCrawler.normalizeTimestamp(result.lastUpdated);
             }
         }
 
         return result;
     }
 
-    profileUrl(username) {
+    static profileUrl(username) {
         if (typeof username === 'string' && username) {
             return `https://www.snapchat.com/add/${username}`;
         }
         return '';
     }
 
-    snapcodeUrl(uuid) {
+    static snapcodeUrl(uuid) {
         if (typeof uuid === 'string' && uuid) {
             return `https://app.snapchat.com/web/deeplink/snapcode?data=${uuid}&version=1&type=png`;
         }
         return '';
     }
 
-    deeplinkUrl(uuid) {
+    static deeplinkUrl(uuid) {
         if (typeof uuid === 'string' && uuid) {
             return `https://snapchat.com/unlock/?type=SNAPCODE&uuid=${uuid}&metadata=01`;
         }
         return '';
+    }
+
+    static extractUuidFromDeeplink(deeplink) {
+        try {
+            if (typeof deeplink === 'string' && deeplink && (deeplink.startsWith("https://www.snapchat.com/unlock/?") || deeplink.startsWith("https://snapchat.com/unlock/?"))) {
+                let deeplinkURL = new URL(deeplink);
+                const regexExp = /^[a-f0-9]{32}$/gi;
+                if (regexExp.test(deeplinkURL.searchParams.get('uuid'))) {
+                    return deeplinkURL.searchParams.get('uuid');
+                }
+            }
+        } catch (e) { }
+
+        return '';
+    }
+
+    static normalizeTimestamp(ts) {
+        return ts < 1e12 ? ts * 1000 : ts;
     }
 
     async getLensByHash(hash) {
@@ -260,7 +278,7 @@ class SnapLensWebCrawler {
                 if (snapshotLens) {
                     snapshotLens = this.#fixArchiveUrlPrefixes(snapshotLens);
 
-                    lens = this.mergeLensItems(snapshotLens, lens);
+                    lens = SnapLensWebCrawler.mergeLensItems(snapshotLens, lens);
                     if (lens.lens_url) {
                         lens.snapshot = snapshot;
                         break;
@@ -295,7 +313,7 @@ class SnapLensWebCrawler {
             const lenses = sources
                 .flatMap(source => Array.isArray(source) ? source : [source])
                 .filter(Boolean)
-                .map(lens => this.formatLensItem(lens, lensDefaults));
+                .map(lens => SnapLensWebCrawler.formatLensItem(lens, lensDefaults));
 
             return lenses
                 .concat(this.#handleSearchResults(pageProps, lensDefaults))
@@ -313,7 +331,7 @@ class SnapLensWebCrawler {
                 return lens;
             }
 
-            return this.formatLensItem(lens, lensDefaults);
+            return SnapLensWebCrawler.formatLensItem(lens, lensDefaults);
         } catch (e) {
             console.error(e);
             return new CrawlerFailure(e.message, url);
@@ -327,7 +345,7 @@ class SnapLensWebCrawler {
                 return lenses;
             }
 
-            return lenses.map(lens => this.formatLensItem(lens, lensDefaults));
+            return lenses.map(lens => SnapLensWebCrawler.formatLensItem(lens, lensDefaults));
         } catch (e) {
             console.error(e);
             return new CrawlerFailure(e.message, url);
@@ -341,7 +359,7 @@ class SnapLensWebCrawler {
                 return lenses;
             }
 
-            return lenses.map(lens => this.formatLensItem(lens, lensDefaults));
+            return lenses.map(lens => SnapLensWebCrawler.formatLensItem(lens, lensDefaults));
         } catch (e) {
             console.error(e);
             return new CrawlerFailure(e.message, url);
@@ -360,7 +378,7 @@ class SnapLensWebCrawler {
 
             return (lensesList || [])
                 .filter(item => item.lensId && item.deeplinkUrl && item.name && item.creatorName)
-                .map(item => this.formatLensItem(item, { obfuscatedSlug }));
+                .map(item => SnapLensWebCrawler.formatLensItem(item, { obfuscatedSlug }));
         } catch (e) {
             console.error(e);
             return new CrawlerFailure(e.message, url);
@@ -385,7 +403,7 @@ class SnapLensWebCrawler {
                     newLenses = newLenses.slice(0, Math.max(0, remaining));
                 }
 
-                newLenses.forEach(lens => lenses.push(this.formatLensItem(lens, lensDefaults)));
+                newLenses.forEach(lens => lenses.push(SnapLensWebCrawler.formatLensItem(lens, lensDefaults)));
 
                 if (!pageProps.hasMore || !pageProps.nextCursorId) {
                     break;
@@ -409,7 +427,7 @@ class SnapLensWebCrawler {
             if (typeof pageProps.initialApolloState === "object") {
                 return Object.values(pageProps.initialApolloState)
                     .filter(item => item.id && item.deeplinkUrl && item.lensName)
-                    .map(lens => this.formatLensItem(lens, lensDefaults));
+                    .map(lens => SnapLensWebCrawler.formatLensItem(lens, lensDefaults));
             }
 
             if (typeof pageProps.encodedSearchResponse === "string") {
@@ -420,7 +438,7 @@ class SnapLensWebCrawler {
                 return (lensSection?.results || [])
                     .map(entry => entry?.result?.lens)
                     .filter(lens => lens?.lensId && lens.deeplinkUrl && lens.name)
-                    .map(lens => this.formatLensItem(lens, lensDefaults));
+                    .map(lens => SnapLensWebCrawler.formatLensItem(lens, lensDefaults));
             }
         } catch (e) {
             console.error(e);
@@ -707,24 +725,6 @@ class SnapLensWebCrawler {
         } catch (e) {
             console.error(e);
         }
-    }
-
-    #extractUuidFromDeeplink(deeplink) {
-        try {
-            if (typeof deeplink === 'string' && deeplink && (deeplink.startsWith("https://www.snapchat.com/unlock/?") || deeplink.startsWith("https://snapchat.com/unlock/?"))) {
-                let deeplinkURL = new URL(deeplink);
-                const regexExp = /^[a-f0-9]{32}$/gi;
-                if (regexExp.test(deeplinkURL.searchParams.get('uuid'))) {
-                    return deeplinkURL.searchParams.get('uuid');
-                }
-            }
-        } catch (e) { }
-
-        return '';
-    }
-
-    #normalizeTimestamp(ts) {
-        return ts < 1e12 ? ts * 1000 : ts;
     }
 
     #archiveTimestampToDateString(YYYYMMDDhhmmss) {
