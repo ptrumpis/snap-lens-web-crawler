@@ -2,7 +2,7 @@ import * as cheerio from 'cheerio';
 import fs from 'fs/promises';
 import path from 'path';
 import HTTPStatusError from './error.js';
-import { CrawlerFailure, CrawlerInvalidUrlFailure, CrawlerJsonFailure, CrawlerJsonParseFailure, CrawlerJsonStructureFailure, CrawlerRequestFailure, CrawlerRequestErrorFailure, CrawlerRequestTimeoutFailure, CrawlerHTTPStatusFailure, CrawlerNotFoundFailure } from './failure.js';
+import { CrawlerFailure, CrawlerInvalidUrlFailure, CrawlerJsonFailure, CrawlerJsonParseFailure, CrawlerJsonStructureFailure, CrawlerRequestErrorFailure, CrawlerRequestTimeoutFailure, CrawlerHTTPStatusFailure, CrawlerNotFoundFailure } from './failure.js';
 
 class SnapLensWebCrawler {
     TOP_CATEGORIES = {
@@ -748,8 +748,11 @@ class SnapLensWebCrawler {
 
     #getProperty(object, propertyPath, urlRef) {
         if (typeof object !== 'object' || !object || Object.keys(object).length === 0) {
-            console.error(`[Parse Error] Invalid object given:`, object);
-            return new CrawlerJsonStructureFailure('Invalid object given', JSON.stringify(object), urlRef);
+            const json = JSON.stringify(object, null, 4);
+            object = null;
+
+            console.error(`[Parse Error] Invalid object given:`, json);
+            return new CrawlerJsonStructureFailure('Invalid object given', json, urlRef);
         }
 
         const value = propertyPath
@@ -759,11 +762,15 @@ class SnapLensWebCrawler {
             .reduce((prev, cur) => prev?.[cur], object);
 
         if (value !== undefined) {
+            object = null;
             return value;
         }
 
-        console.error(`[Parse Error] Property path not found: '${propertyPath}'`, object);
-        return new CrawlerJsonStructureFailure(`Property path not found: '${propertyPath}'`, JSON.stringify(object), urlRef);
+        const json = JSON.stringify(object, null, 4);
+        object = null;
+
+        console.error(`[Parse Error] Property path not found: '${propertyPath}'`, json);
+        return new CrawlerJsonStructureFailure(`Property path not found: '${propertyPath}'`, json, urlRef);
     }
 
     #sleep(ms) {
