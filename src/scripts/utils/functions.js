@@ -102,8 +102,8 @@ async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloa
         destroyCrawler = true;
     }
 
-    if (!(resolvedLensCache instanceof Map)) {
-        resolvedLensCache = new Map();
+    if (!(resolvedLensCache instanceof Set)) {
+        resolvedLensCache = new Set();
         clearResolvedCache = true;
     }
 
@@ -332,7 +332,7 @@ async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloa
                 // mark lens as resolved for the current crawl iteration
                 // since there are no more sources to query
                 if (resolvedLensCache) {
-                    resolvedLensCache.set(lensInfo.uuid, true);
+                    resolvedLensCache.add(lensInfo.uuid);
                 }
             } else {
                 console.error(`Lens UUID is missing`, lensInfo);
