@@ -1,6 +1,8 @@
 import * as cheerio from 'cheerio';
 import fs from 'fs/promises';
 import path from 'path';
+import { createWriteStream } from 'fs';
+import { pipeline } from 'stream/promises';
 import HTTPStatusError from './error.js';
 import { CrawlerFailure, CrawlerInvalidUrlFailure, CrawlerJsonFailure, CrawlerJsonParseFailure, CrawlerJsonStructureFailure, CrawlerRequestErrorFailure, CrawlerRequestTimeoutFailure, CrawlerHTTPStatusFailure, CrawlerNotFoundFailure } from './failure.js';
 
@@ -72,9 +74,8 @@ class SnapLensWebCrawler {
             }
 
             if (response?.ok) {
-                const buffer = await response.arrayBuffer();
                 await fs.mkdir(path.dirname(dest), { recursive: true });
-                await fs.writeFile(dest, Buffer.from(buffer));
+                await pipeline(response.body, createWriteStream(dest));
 
                 return true;
             }
