@@ -482,7 +482,7 @@ class SnapLensWebCrawler {
         }
 
         try {
-            const body = await this.#loadUrl(url, options);
+            let body = await this.#loadUrl(url, options);
             if (body instanceof CrawlerFailure) {
                 return body;
             }
@@ -492,9 +492,12 @@ class SnapLensWebCrawler {
                 return new CrawlerFailure('Empty HTML body received', url);
             }
 
-            const $ = cheerio.load(body);
+            let $ = cheerio.load(body);
+            body = null;
 
-            const jsonString = $(this.#SCRIPT_SELECTOR).text();
+            let jsonString = $(this.#SCRIPT_SELECTOR).text();
+            $ = null;
+
             if (typeof jsonString !== 'string' || !jsonString) {
                 console.error(`[Crawl Error] ${url} - Unable to read script tag: ${this.#SCRIPT_SELECTOR}`);
                 return CrawlerFailure(`Unable to read script tag: ${this.#SCRIPT_SELECTOR}`, url);
@@ -502,6 +505,8 @@ class SnapLensWebCrawler {
 
             try {
                 const parsedJson = JSON.parse(jsonString);
+                jsonString = null;
+
                 if (parsedJson) {
                     this.#setJsonCache(url, parsedJson);
                 }
@@ -529,13 +534,15 @@ class SnapLensWebCrawler {
         }
 
         try {
-            const jsonString = await this.#loadUrl(url, options);
+            let jsonString = await this.#loadUrl(url, options);
             if (jsonString instanceof CrawlerFailure) {
                 return jsonString;
             }
 
             try {
                 const parsedJson = JSON.parse(jsonString);
+                jsonString = null;
+
                 if (parsedJson) {
                     this.#setJsonCache(url, parsedJson);
                 }
