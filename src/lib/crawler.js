@@ -36,6 +36,7 @@ class SnapLensWebCrawler {
     #cacheTTL;
     #gcInterval;
     #cleanupInterval;
+    #console;
 
     static #registry = new FinalizationRegistry((cleanupInterval) => {
         clearInterval(cleanupInterval);
@@ -48,7 +49,8 @@ class SnapLensWebCrawler {
         gcInterval = 3600,
         failedRequestDelayMs = 4500,
         maxRequestRetries = 2,
-        headers = undefined
+        headers = undefined,
+        verbose = true,
     } = {}) {
         this.#connectionTimeoutMs = Math.max(connectionTimeoutMs, 1000);
         this.#minRequestDelayMs = Math.max(minRequestDelayMs, 0);
@@ -56,6 +58,14 @@ class SnapLensWebCrawler {
         this.#maxRequestRetries = Math.max(maxRequestRetries, 0);
         this.#headers = headers || {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'
+        };
+
+        this.#console = verbose ? console : {
+            log: () => { },
+            info: () => { },
+            warn: () => { },
+            error: () => { },
+            debug: () => { }
         };
 
         this.#cacheTTL = cacheTTL ? Math.max(parseInt(cacheTTL) * 1000, 1000) : 0;
@@ -86,7 +96,7 @@ class SnapLensWebCrawler {
                 return true;
             }
         } catch (e) {
-            console.error(e);
+            this.#console.error(e);
             return new CrawlerFailure(e.message, url);
         }
 
@@ -243,7 +253,7 @@ class SnapLensWebCrawler {
 
     async getTopLensesByCategory(category = 'default', maxLenses = 100) {
         if (!this.TOP_CATEGORIES[category]) {
-            console.error(`Unknown top lens category: ${category} \nValid top lens categories are:`, Object.getOwnPropertyNames(this.TOP_CATEGORIES));
+            this.#console.error(`Unknown top lens category: ${category} \nValid top lens categories are:`, Object.getOwnPropertyNames(this.TOP_CATEGORIES));
             return [];
         }
 
@@ -298,7 +308,7 @@ class SnapLensWebCrawler {
 
             return lens;
         } catch (e) {
-            console.error(e);
+            this.#console.error(e);
             return new CrawlerFailure(e.message, url);
         }
     }
@@ -326,7 +336,7 @@ class SnapLensWebCrawler {
                 .concat(this.#handleSearchResults(pageProps, lensDefaults))
                 .map(lens => this.#fixArchiveUrlPrefixes(lens));
         } catch (e) {
-            console.error(e);
+            this.#console.error(e);
             return new CrawlerFailure(e.message, url);
         }
     }
@@ -340,7 +350,7 @@ class SnapLensWebCrawler {
 
             return SnapLensWebCrawler.formatLensItem(lens, lensDefaults);
         } catch (e) {
-            console.error(e);
+            this.#console.error(e);
             return new CrawlerFailure(e.message, url);
         }
     }
@@ -354,7 +364,7 @@ class SnapLensWebCrawler {
 
             return lenses.map(lens => SnapLensWebCrawler.formatLensItem(lens, lensDefaults));
         } catch (e) {
-            console.error(e);
+            this.#console.error(e);
             return new CrawlerFailure(e.message, url);
         }
     }
@@ -368,7 +378,7 @@ class SnapLensWebCrawler {
 
             return lenses.map(lens => SnapLensWebCrawler.formatLensItem(lens, lensDefaults));
         } catch (e) {
-            console.error(e);
+            this.#console.error(e);
             return new CrawlerFailure(e.message, url);
         }
     }
@@ -387,7 +397,7 @@ class SnapLensWebCrawler {
                 .filter(item => item.lensId && item.deeplinkUrl && item.name && item.creatorName)
                 .map(item => SnapLensWebCrawler.formatLensItem(item, { obfuscatedSlug }));
         } catch (e) {
-            console.error(e);
+            this.#console.error(e);
             return new CrawlerFailure(e.message, url);
         }
     }
@@ -419,7 +429,7 @@ class SnapLensWebCrawler {
                 currentUrl.searchParams.set("cursor_id", pageProps.nextCursorId);
             }
         } catch (e) {
-            console.error(e);
+            this.#console.error(e);
         }
 
         return lenses;
@@ -448,7 +458,7 @@ class SnapLensWebCrawler {
                     .map(lens => SnapLensWebCrawler.formatLensItem(lens, lensDefaults));
             }
         } catch (e) {
-            console.error(e);
+            this.#console.error(e);
         }
 
         return [];
@@ -477,7 +487,7 @@ class SnapLensWebCrawler {
             const snapshotUrl = new URL(result.closest.url);
             return new ArchivedSnapshot(snapshotUrl.toString(), this.#archiveTimestampToDateString(snapshotTime));
         } catch (e) {
-            console.error(`[Error] Invalid Snapshot URL: ${url} - ${e.message}`);
+            this.#console.error(`[Error] Invalid Snapshot URL: ${url} - ${e.message}`);
             return new CrawlerInvalidUrlFailure(e.message, url);
         }
     }
@@ -495,7 +505,7 @@ class SnapLensWebCrawler {
             }
 
             if (typeof body === 'string' && body.trim().length === 0) {
-                console.error(`[Crawl Error] ${url} - Empty HTML body received`);
+                this.#console.error(`[Crawl Error] ${url} - Empty HTML body received`);
                 return new CrawlerFailure('Empty HTML body received', url);
             }
 
@@ -506,7 +516,7 @@ class SnapLensWebCrawler {
             $ = null;
 
             if (typeof jsonString !== 'string' || !jsonString) {
-                console.error(`[Crawl Error] ${url} - Unable to read script tag: ${this.#SCRIPT_SELECTOR}`);
+                this.#console.error(`[Crawl Error] ${url} - Unable to read script tag: ${this.#SCRIPT_SELECTOR}`);
                 return new CrawlerFailure(`Unable to read script tag: ${this.#SCRIPT_SELECTOR}`, url);
             }
 
@@ -521,15 +531,15 @@ class SnapLensWebCrawler {
                 return this.#getProperty(parsedJson, jsonPropertyPath, url);
             } catch (e) {
                 if (e.name === 'SyntaxError') {
-                    console.error(`[JSON Error] ${url} - ${e.message}`);
+                    this.#console.error(`[JSON Error] ${url} - ${e.message}`);
                     return new CrawlerJsonParseFailure(e.message, jsonString, url);
                 } else {
-                    console.error(`[Error] ${url}`, e);
+                    this.#console.error(`[Error] ${url}`, e);
                     return new CrawlerJsonFailure(e.message, jsonString, url);
                 }
             }
         } catch (e) {
-            console.error(e);
+            this.#console.error(e);
             return new CrawlerFailure(e.message, url);
         }
     }
@@ -557,15 +567,15 @@ class SnapLensWebCrawler {
                 return this.#getProperty(parsedJson, jsonPropertyPath, url);
             } catch (e) {
                 if (e.name === 'SyntaxError') {
-                    console.error(`[JSON Error] ${url} - ${e.message}`);
+                    this.#console.error(`[JSON Error] ${url} - ${e.message}`);
                     return new CrawlerJsonParseFailure(e.message, jsonString, url);
                 } else {
-                    console.error(`[Error] ${url}`, e);
+                    this.#console.error(`[Error] ${url}`, e);
                     return new CrawlerJsonFailure(e.message, jsonString, url);
                 }
             }
         } catch (e) {
-            console.error(e);
+            this.#console.error(e);
             return new CrawlerFailure(e.message, url);
         }
     }
@@ -579,7 +589,7 @@ class SnapLensWebCrawler {
 
             return response;
         } catch (e) {
-            console.error(e);
+            this.#console.error(e);
             return new CrawlerFailure(e.message, url);
         }
     }
@@ -590,7 +600,7 @@ class SnapLensWebCrawler {
         try {
             hostname = new URL(url).hostname;
         } catch (e) {
-            console.error(`[Error] Invalid URL: ${url} - ${e.message}`);
+            this.#console.error(`[Error] Invalid URL: ${url} - ${e.message}`);
             return new CrawlerInvalidUrlFailure(e.message, url);
         }
 
@@ -607,7 +617,7 @@ class SnapLensWebCrawler {
 
             return await this.#request(url, method, options);
         } catch (e) {
-            console.error(e);
+            this.#console.error(e);
             return new CrawlerFailure(e.message, url);
         }
     }
@@ -620,7 +630,7 @@ class SnapLensWebCrawler {
         try {
             hostname = new URL(url).hostname;
         } catch (e) {
-            console.error(`[Error] Invalid URL: ${url} - ${e.message}`);
+            this.#console.error(`[Error] Invalid URL: ${url} - ${e.message}`);
             return new CrawlerInvalidUrlFailure(e.message, url);
         }
 
@@ -650,34 +660,34 @@ class SnapLensWebCrawler {
                     if (e.code == 404) {
                         crawlerFailure = new CrawlerNotFoundFailure(e.message, e.code, url, crawlerFailure);
                         if (retryNotFound === true) {
-                            console.error(`[Not Found] ${retryStatus} ${url} - ${e.message}`);
+                            this.#console.error(`[Not Found] ${retryStatus} ${url} - ${e.message}`);
                         } else {
-                            console.error(`[Not Found] ${url} - ${e.message}`);
+                            this.#console.error(`[Not Found] ${url} - ${e.message}`);
                             break;
                         }
                     } else {
                         crawlerFailure = new CrawlerHTTPStatusFailure(e.message, e.code, url, crawlerFailure);
                         if (retryFailed === true) {
-                            console.error(`[Failed] ${retryStatus} ${url} - ${e.message}`);
+                            this.#console.error(`[Failed] ${retryStatus} ${url} - ${e.message}`);
                         } else {
-                            console.error(`[Failed] ${url} - ${e.message}`);
+                            this.#console.error(`[Failed] ${url} - ${e.message}`);
                             break;
                         }
                     }
                 } else if (e.name === 'AbortError') {
                     crawlerFailure = new CrawlerRequestTimeoutFailure(e.message, url, crawlerFailure);
                     if (retryTimeout === true) {
-                        console.error(`[Timeout] ${retryStatus} ${url}`);
+                        this.#console.error(`[Timeout] ${retryStatus} ${url}`);
                     } else {
-                        console.error(`[Timeout] ${url}`);
+                        this.#console.error(`[Timeout] ${url}`);
                         break;
                     }
                 } else {
                     crawlerFailure = new CrawlerRequestErrorFailure(e.message, url, crawlerFailure);
                     if (retryError === true) {
-                        console.error(`[Error] ${retryStatus} ${url} - ${e.message}`);
+                        this.#console.error(`[Error] ${retryStatus} ${url} - ${e.message}`);
                     } else {
-                        console.error(`[Error] ${url} - ${e.message}`);
+                        this.#console.error(`[Error] ${url} - ${e.message}`);
                         break;
                     }
                 }
@@ -737,7 +747,7 @@ class SnapLensWebCrawler {
                 }
             }
         } catch (e) {
-            console.error(e);
+            this.#console.error(e);
         }
     }
 
@@ -765,7 +775,7 @@ class SnapLensWebCrawler {
             const json = JSON.stringify(object, null, 4);
             object = null;
 
-            console.error(`[Parse Error] Invalid object given:`, json);
+            this.#console.error(`[Parse Error] Invalid object given:`, json);
             return new CrawlerJsonStructureFailure('Invalid object given', json, urlRef);
         }
 
@@ -783,7 +793,7 @@ class SnapLensWebCrawler {
         const json = JSON.stringify(object, null, 4);
         object = null;
 
-        console.error(`[Parse Error] Property path not found: '${propertyPath}'`, json);
+        this.#console.error(`[Parse Error] Property path not found: '${propertyPath}'`, json);
         return new CrawlerJsonStructureFailure(`Property path not found: '${propertyPath}'`, json, urlRef);
     }
 
