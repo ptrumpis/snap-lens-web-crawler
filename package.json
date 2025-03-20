@@ -1,6 +1,6 @@
 {
   "name": "@ptrumpis/snap-lens-web-crawler",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0-rc.3",
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
@@ -27,7 +27,7 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=18"
+    "node": ">=18.17"
   },
   "scripts": {
     "crawl": "node --expose-gc src/scripts/crawl.js",
