@@ -37,6 +37,10 @@ class SnapLensWebCrawler {
     #gcInterval;
     #cleanupInterval;
 
+    static #registry = new FinalizationRegistry((cleanupInterval) => {
+        clearInterval(cleanupInterval);
+    });
+
     constructor({
         connectionTimeoutMs = 9000,
         minRequestDelayMs = 100,
@@ -58,12 +62,14 @@ class SnapLensWebCrawler {
         this.#gcInterval = Math.max(parseInt(gcInterval) * 1000, 5 * 60 * 1000);
 
         this.#cleanupInterval = setInterval(() => { this.#cleanupCache() }, this.#gcInterval).unref();
+        SnapLensWebCrawler.#registry.register(this, this.#cleanupInterval, this);
     }
 
     destroy() {
         clearInterval(this.#cleanupInterval);
         this.#lastRequestTimestamps.clear();
         this.#jsonCache.clear();
+        SnapLensWebCrawler.#registry.unregister(this);
     }
 
     async downloadFile(url, dest) {
