@@ -87,7 +87,7 @@ class SnapLensWebCrawler {
             }
         } catch (e) {
             console.error(e);
-            return CrawlerFailure(e.message, url);
+            return new CrawlerFailure(e.message, url);
         }
 
         return false;
@@ -507,7 +507,7 @@ class SnapLensWebCrawler {
 
             if (typeof jsonString !== 'string' || !jsonString) {
                 console.error(`[Crawl Error] ${url} - Unable to read script tag: ${this.#SCRIPT_SELECTOR}`);
-                return CrawlerFailure(`Unable to read script tag: ${this.#SCRIPT_SELECTOR}`, url);
+                return new CrawlerFailure(`Unable to read script tag: ${this.#SCRIPT_SELECTOR}`, url);
             }
 
             try {
