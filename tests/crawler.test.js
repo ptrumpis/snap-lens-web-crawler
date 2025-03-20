@@ -260,6 +260,7 @@ describe('SnapLensWebCrawler', () => {
 
         const result = await crawler.getLensesFromUrl('https://example.com/should-fail-with-400');
         assert(result instanceof CrawlerHTTPStatusFailure, 'Result should be an error');
+        assert.strictEqual(result.code, 400, 'HTTP status code should match');
     });
 
     it('should handle a HTTP 404 request gracefully', async () => {
@@ -269,6 +270,7 @@ describe('SnapLensWebCrawler', () => {
 
         const result = await crawler.getLensesFromUrl('https://example.com/should-fail-with-404');
         assert(result instanceof CrawlerNotFoundFailure, 'Result should be an error');
+        assert.strictEqual(result.code, 404, 'HTTP status code should match');
     });
 
     it('should handle a HTTP 500 request gracefully', async () => {
@@ -278,5 +280,6 @@ describe('SnapLensWebCrawler', () => {
 
         const result = await crawler.getLensesFromUrl('https://example.com/should-fail-with-500');
         assert(result instanceof CrawlerHTTPStatusFailure, 'Result should be an error');
+        assert.strictEqual(result.code, 500, 'HTTP status code should match');
     });
 });
