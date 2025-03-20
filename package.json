@@ -33,7 +33,7 @@
     "crawl": "node --expose-gc src/scripts/crawl.js",
     "import-csv": "node --expose-gc src/scripts/importCsv.js",
     "import-url": "node --expose-gc src/scripts/importUrl.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "mocha tests/**/*.test.js"
   },
   "author": "Patrick Trumpis <ptrumpis@pm.me>",
   "repository": {
@@ -48,6 +48,8 @@
     "cheerio": "1.0.0"
   },
   "devDependencies": {
-    "csv-parser": "3.2.0"
+    "csv-parser": "~3.2.0",
+    "mocha": "~11.1.0",
+    "nock": "~14.0.1"
   }
 }
