@@ -69,17 +69,22 @@ class SnapLensWebCrawler {
         };
 
         this.#cacheTTL = cacheTTL ? Math.max(parseInt(cacheTTL) * 1000, 1000) : 0;
-        this.#gcInterval = Math.max(parseInt(gcInterval) * 1000, 5 * 60 * 1000);
+        this.#gcInterval = gcInterval ? Math.max(parseInt(gcInterval) * 1000, 5 * 60 * 1000) : false;
 
-        this.#cleanupInterval = setInterval(() => { this.#cleanupCache() }, this.#gcInterval).unref();
-        SnapLensWebCrawler.#registry.register(this, this.#cleanupInterval, this);
+        if (this.#gcInterval) {
+            this.#cleanupInterval = setInterval(() => { this.#cleanupCache() }, this.#gcInterval).unref();
+            SnapLensWebCrawler.#registry.register(this, this.#cleanupInterval, this);
+        }
     }
 
     destroy() {
-        clearInterval(this.#cleanupInterval);
+        if (this.#gcInterval) {
+            clearInterval(this.#cleanupInterval);
+            SnapLensWebCrawler.#registry.unregister(this);
+        }
+
         this.#lastRequestTimestamps.clear();
         this.#jsonCache.clear();
-        SnapLensWebCrawler.#registry.unregister(this);
     }
 
     async downloadFile(url, dest) {
@@ -598,7 +603,7 @@ class SnapLensWebCrawler {
         let hostname = null;
 
         try {
-            hostname = new URL(url).hostname;
+            hostname = (new URL(url)).hostname;
         } catch (e) {
             this.#console.error(`[Error] Invalid URL: ${url} - ${e.message}`);
             return new CrawlerInvalidUrlFailure(e.message, url);
@@ -628,7 +633,7 @@ class SnapLensWebCrawler {
         let hostname = null;
 
         try {
-            hostname = new URL(url).hostname;
+            hostname = (new URL(url)).hostname;
         } catch (e) {
             this.#console.error(`[Error] Invalid URL: ${url} - ${e.message}`);
             return new CrawlerInvalidUrlFailure(e.message, url);
