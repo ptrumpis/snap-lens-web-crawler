@@ -1,7 +1,7 @@
 import SnapLensWebCrawler from "../lib/crawler.js";
 import * as Utils from "./utils/functions.js";
 
-const crawler = new SnapLensWebCrawler({ maxRequestRetries: 2 });
+const crawler = new SnapLensWebCrawler({ maxRequestRetries: 2, gcInterval: false });
 const resolvedLensCache = new Set();
 
 for (const category in crawler.TOP_CATEGORIES) {
