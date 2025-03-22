@@ -8,8 +8,6 @@ import RelayServer from '../../lib/relay.js';
 import SnapLensWebCrawler from "../../lib/crawler.js";
 import { CrawlerFailure, CrawlerNotFoundFailure } from '../../lib/failure.js';
 
-const relayServer = new RelayServer();
-
 const boltBasePath = "./output/bolts/";
 const infoBasePath = "./output/info/";
 
@@ -106,6 +104,13 @@ async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloa
         resolvedLensCache = new Set();
         clearResolvedCache = true;
     }
+
+    const relayServer = new RelayServer({
+        connectionTimeoutMs: crawler.getConnectionTimeout(),
+        failedRequestDelayMs: crawler.getFailedRequestDelay(),
+        maxRequestRetries: crawler.getMaxRequestRetries(),
+        verbose: crawler.isVerbose()
+    });
 
     for (let lensInfo of lenses) {
         try {
@@ -289,10 +294,10 @@ async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloa
                             lensInfo.hint_id = unlock.hint_id || "";
                             lensInfo.additional_hint_ids = unlock.additional_hint_ids || {};
 
-                            if (unlock.lens_url) {
+                            if (unlock.lens_url && !zipFileExists && !lensInfo.is_backed_up) {
                                 console.log(`[Downloading] ${unlock.lens_url}`);
 
-                                if (!zipFileExists && !lensInfo.is_backed_up && await crawler.downloadFile(unlock.lens_url, zipFilePath) === true) {
+                                if (await crawler.downloadFile(unlock.lens_url, zipFilePath) === true) {
                                     zipFileExists = true;
                                 }
                             }
@@ -300,6 +305,7 @@ async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloa
                     }
 
                     if (zipFileExists) {
+                        // file needs to be present for sha-256 generation
                         lensInfo.lens_original_sha256 = await generateSha256(zipFilePath);
                         await writeValueToFile(lensInfo.lens_original_sha256, path.join(boltFolderPath, "lens.original.sha256"));
                         await writeValueToFile(lensInfo.lens_original_signature || "", path.join(boltFolderPath, "lens.original.sig"));
