@@ -123,18 +123,18 @@ class SnapLensWebCrawler {
         return false;
     }
 
-    static mergeLensItems(item1, item2) {
+    static mergeLensItems(primary, secondary) {
         function isEmpty(value) {
             return (!value && value !== false) ||
                 (Array.isArray(value) && value.length === 0) ||
                 (typeof value === 'object' && value !== null && Object.keys(value).length === 0);
         }
 
-        let merged = { ...item2, ...item1 };
+        let merged = { ...secondary, ...primary };
 
         for (let key in merged) {
-            if (isEmpty(item1[key]) && !isEmpty(item2[key])) {
-                merged[key] = item2[key];
+            if (isEmpty(primary[key]) && !isEmpty(secondary[key])) {
+                merged[key] = secondary[key];
             }
         }
 
