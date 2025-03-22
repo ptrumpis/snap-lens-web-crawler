@@ -198,6 +198,12 @@ class SnapLensWebCrawler {
             }
         }
 
+        Object.keys(result).forEach(key => {
+            if (typeof result[key] === 'string') {
+                result[key] = result[key].trim();
+            }
+        });
+
         return result;
     }
 
