@@ -1,15 +1,32 @@
+import HTTPStatusError from './error.js';
+
 class RelayServer {
     #host;
-    #timeoutMs;
+    #connectionTimeoutMs;
+    #failedRequestDelayMs;
+    #maxRequestRetries;
     #headers;
+    #verbose;
+    #console;
 
-    constructor(host = 'https://snapchatreverse.jaku.tv', timeoutMs = 6000) {
+    constructor({ host = 'https://snapchatreverse.jaku.tv', connectionTimeoutMs = 9000, failedRequestDelayMs = 4500, maxRequestRetries = 2, verbose = true } = {}) {
         this.#host = host;
-        this.#timeoutMs = timeoutMs;
+        this.#connectionTimeoutMs = connectionTimeoutMs;
+        this.#failedRequestDelayMs = failedRequestDelayMs;
+        this.#maxRequestRetries = maxRequestRetries;
         this.#headers = {
             'User-Agent': 'SnapCamera/1.21.0.0 (Windows 10 Version 2009)',
             'Content-Type': 'application/json',
             'X-Installation-Id': 'default'
+        };
+
+        this.#verbose = verbose;
+        this.#console = this.#verbose ? console : {
+            log: () => { },
+            info: () => { },
+            warn: () => { },
+            error: () => { },
+            debug: () => { }
         };
     }
 
@@ -30,39 +47,62 @@ class RelayServer {
     }
 
     async #request(path, method = 'GET', body = null) {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => {
-            controller.abort();
-        }, this.#timeoutMs);
-
         const url = `${this.#host}${path}`;
+        const maxAttempts = this.#maxRequestRetries + 1;
+        let attempt = 1;
 
-        try {
-            let requestInit = { method: method, headers: this.#headers, signal: controller.signal };
-            if (body) {
-                requestInit.body = body;
-            }
+        while (attempt <= maxAttempts) {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => {
+                controller.abort();
+            }, this.#connectionTimeoutMs);
 
-            const response = await fetch(url, requestInit);
-            clearTimeout(timeout);
-
-            if (response?.ok) {
-                const data = await response.text();
-                if (data) {
-                    return JSON.parse(data);
+            try {
+                let requestInit = { method: method, headers: this.#headers, signal: controller.signal };
+                if (body) {
+                    requestInit.body = body;
                 }
+
+                const response = await fetch(url, requestInit);
+                clearTimeout(timeout);
+
+                if (response?.ok) {
+                    const data = await response.text();
+                    return (data) ? JSON.parse(data): null;
+                }
+
+                throw new HTTPStatusError(response?.status);
+            } catch (e) {
+                clearTimeout(timeout);
+                if (e instanceof HTTPStatusError) {
+                    if (e.code == 404) {
+                        this.#console.error(`[Not Found] ${url} - ${e.message}`);
+                        break;
+                    } else {
+                        this.#console.error(`[Failed] (${attempt}/${maxAttempts}) ${url} - ${e.message}`);
+                    }
+                } else if (e.name === 'AbortError') {
+                    this.#console.error(`[Timeout] (${attempt}/${maxAttempts}) ${url}`);
+                } else {
+                    this.#console.error(`[Error] (${attempt}/${maxAttempts}) ${url} - ${e.message}`);
+                }
+            } finally {
+                clearTimeout(timeout);
             }
-        } catch (e) {
-            if (e.name === 'AbortError') {
-                console.error(`[Timeout]: ${url}`);
-            } else {
-                console.error(`[Error]: ${url} - ${e.message}`);
+
+            attempt++;
+            if (attempt <= maxAttempts) {
+                await this.#sleep(this.#failedRequestDelayMs);
             }
-        } finally {
-            clearTimeout(timeout);
         }
 
         return null;
+    }
+
+    #sleep(ms) {
+        return new Promise((resolve) => {
+            setTimeout(resolve, ms);
+        });
     }
 }
 
