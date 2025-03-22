@@ -128,31 +128,23 @@ async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloa
                 let existingLensInfo = {};
                 try {
                     const data = await fs.readFile(infoFilePath, 'utf8');
-                    const lensUrl = lensInfo.lens_url;
-                    const lensSig = lensInfo.signature;
-                    const lastUpdated = lensInfo.last_updated;
 
                     existingLensInfo = JSON.parse(data);
                     if (existingLensInfo) {
-                        if (overwriteExistingData) {
+                        if (existingLensInfo.lens_url && lensInfo.lens_url && existingLensInfo.lens_url !== lensInfo.lens_url && existingLensInfo.is_mirrored !== true) {
+                            // keep latest information, overwrite existing data and reset download flags
+                            console.info(`[URL Replace] Replacing URL for Lens: ${lensInfo.uuid}`);
+                            lensInfo = SnapLensWebCrawler.mergeLensItems(lensInfo, existingLensInfo);
+                            lensInfo.sha256 = "";
+                            lensInfo.is_mirrored = "";
+                            lensInfo.is_download_broken = "";
+                        } else if (overwriteExistingData) {
                             // keep latest information and overwrite existing data 
                             lensInfo = SnapLensWebCrawler.mergeLensItems(lensInfo, existingLensInfo);
                         } else {
                             // keep existing data and add missing information only
                             lensInfo = SnapLensWebCrawler.mergeLensItems(existingLensInfo, lensInfo);
                             lensInfo.uuid = lensInfo.uuid.toLowerCase();
-                        }
-
-                        // force lens url update if previous url has not been mirrored
-                        if (existingLensInfo.lens_url && lensUrl && existingLensInfo.lens_url !== lensUrl && existingLensInfo.is_mirrored !== true) {
-                            console.info(`[URL Replace] Replacing URL for Lens: ${lensInfo.uuid}`);
-
-                            lensInfo.lens_url = lensUrl;
-                            lensInfo.signature = lensSig || existingLensInfo.signature || "";
-                            lensInfo.last_updated = lastUpdated || existingLensInfo.last_updated || "";
-                            lensInfo.sha256 = "";
-                            lensInfo.is_mirrored = "";
-                            lensInfo.is_download_broken = "";
                         }
                     }
                 } catch (err) {
