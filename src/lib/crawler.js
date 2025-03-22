@@ -24,7 +24,7 @@ class SnapLensWebCrawler {
     #SNAPSHOT_THRESHOLD_MAX = 20241231235959;
 
     // try to get snapshots from 2022-2024
-    #SNAPSHOT_TIMESTAMP = 20230601;
+    #SNAPSHOT_TIMESTAMP = 20230601000000;
 
     #connectionTimeoutMs;
     #minRequestDelayMs;
