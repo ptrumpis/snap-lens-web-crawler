@@ -33,7 +33,8 @@
     "crawl": "node --expose-gc src/scripts/crawl.js",
     "import-csv": "node --expose-gc src/scripts/importCsv.js",
     "import-url": "node --expose-gc src/scripts/importUrl.js",
-    "test": "mocha tests/**/*.test.js"
+    "live-test": "mocha -t 20000 tests/live/*.test.js",
+    "test": "mocha tests/*.test.js"
   },
   "author": "Patrick Trumpis <ptrumpis@pm.me>",
   "repository": {
