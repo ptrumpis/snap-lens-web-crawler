@@ -36,6 +36,7 @@ class SnapLensWebCrawler {
     #cacheTTL;
     #gcInterval;
     #cleanupInterval;
+    #verbose;
     #console;
 
     static #registry = new FinalizationRegistry((cleanupInterval) => {
@@ -60,13 +61,7 @@ class SnapLensWebCrawler {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'
         };
 
-        this.#console = verbose ? console : {
-            log: () => { },
-            info: () => { },
-            warn: () => { },
-            error: () => { },
-            debug: () => { }
-        };
+        this.setVerbose(verbose);
 
         this.#cacheTTL = cacheTTL ? Math.max(parseInt(cacheTTL) * 1000, 1000) : 0;
         this.#gcInterval = gcInterval ? Math.max(parseInt(gcInterval) * 1000, 5 * 60 * 1000) : false;
@@ -75,6 +70,26 @@ class SnapLensWebCrawler {
             this.#cleanupInterval = setInterval(() => { this.#cleanupCache() }, this.#gcInterval).unref();
             SnapLensWebCrawler.#registry.register(this, this.#cleanupInterval, this);
         }
+    }
+
+    getConnectionTimeout() { return this.#connectionTimeoutMs; }
+    getMinRequestDelay() { return this.#minRequestDelayMs; }
+    getFailedRequestDelay() { return this.#failedRequestDelayMs; }
+    getMaxRequestRetries() { return this.#maxRequestRetries; }
+    getCacheTTL() { return this.#cacheTTL; }
+    getGCInterval() { return this.#gcInterval; }
+    getHeaders() { return this.#headers; }
+    isVerbose() { return this.#verbose; }
+
+    setVerbose(verbose) {
+        this.#verbose = verbose;
+        this.#console = this.#verbose ? console : {
+            log: () => { },
+            info: () => { },
+            warn: () => { },
+            error: () => { },
+            debug: () => { }
+        };
     }
 
     destroy() {
@@ -94,7 +109,7 @@ class SnapLensWebCrawler {
                 return response;
             }
 
-            if (response?.ok) {
+            if (response?.ok && response.body) {
                 await fs.mkdir(path.dirname(dest), { recursive: true });
                 await pipeline(response.body, createWriteStream(dest));
 
@@ -660,6 +675,7 @@ class SnapLensWebCrawler {
 
                 throw new HTTPStatusError(response?.status);
             } catch (e) {
+                clearTimeout(timeout);
                 const retryStatus = `(${attempt}/${maxAttempts})`;
                 if (e instanceof HTTPStatusError) {
                     if (e.code == 404) {
