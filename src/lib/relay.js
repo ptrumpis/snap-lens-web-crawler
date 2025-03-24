@@ -67,8 +67,8 @@ class RelayServer {
                 clearTimeout(timeout);
 
                 if (response?.ok) {
-                    const data = await response.text();
-                    return (data) ? JSON.parse(data): null;
+                    const data = (response.body) ? await response.text() : null;
+                    return (data) ? JSON.parse(data) : null;
                 }
 
                 throw new HTTPStatusError(response?.status);
