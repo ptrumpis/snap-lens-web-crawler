@@ -11,7 +11,6 @@ body:
       value: |
         ## 🐛 Bug Report
         Fill out the following information to help diagnose the issue.  
-        Note: non-working or infinite loading lenses are not bugs!
 
   - type: textarea
     id: bug-description
@@ -40,7 +39,7 @@ body:
         ## ✍️ Provide your system information.
 
   - type: dropdown
-    id: snap-camera-server-version
+    id: node-version
     attributes:
       label: Node Version
       description: Please select your Node.js version (node -v).
