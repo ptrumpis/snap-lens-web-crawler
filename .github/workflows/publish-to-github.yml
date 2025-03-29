@@ -23,7 +23,7 @@ jobs:
           scope: '@ptrumpis'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Run tests
         run: npm test
