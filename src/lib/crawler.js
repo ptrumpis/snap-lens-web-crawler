@@ -155,11 +155,11 @@ class SnapLensWebCrawler {
             deeplink: deeplinkUrl || SnapLensWebCrawler.deeplinkUrl(uuid) || "",
             snapcode_url: lensItem.snapcodeUrl || SnapLensWebCrawler.snapcodeUrl(uuid) || "",
 
-            lens_name: lensItem.lensName || lensItem.name || "",
+            lens_name: (lensItem.lensName || lensItem.name || "")?.trim(),
             lens_creator_search_tags: lensItem.lensCreatorSearchTags || [],
             lens_status: "Live",
 
-            user_display_name: lensItem.lensCreatorDisplayName || lensItem.creator?.title || lensItem.creatorName || "",
+            user_display_name: (lensItem.lensCreatorDisplayName || lensItem.creator?.title || lensItem.creatorName || "")?.trim(),
             user_name: lensItem.lensCreatorUsername || userName || "",
             user_profile_url: lensItem.userProfileUrl || SnapLensWebCrawler.profileUrl(lensItem.lensCreatorUsername || userName) || "",
             user_id: lensItem.creatorUserId || "",
@@ -178,31 +178,25 @@ class SnapLensWebCrawler {
         if (lensItem.thumbnailSequence && typeof lensItem.thumbnailSequence === 'object' && Object.keys(lensItem.thumbnailSequence).length) {
             result.image_sequence = {
                 url_pattern: lensItem.thumbnailSequence?.urlPattern || "",
-                size: lensItem.thumbnailSequence?.numThumbnails || 0,
-                frame_interval_ms: lensItem.thumbnailSequence?.animationIntervalMs || 0
+                size: parseInt(lensItem.thumbnailSequence?.numThumbnails) || 0,
+                frame_interval_ms: parseInt(lensItem.thumbnailSequence?.animationIntervalMs) || 0
             }
         }
 
         //unlock
-        if (lensItem.lensResource) {
+        if (lensItem.lensResource && typeof lensItem.lensResource === 'object' && Object.keys(lensItem.lensResource).length) {
             Object.assign(result, {
                 lens_id: lensId || "",
                 lens_url: lensItem.lensResource?.archiveLink || "",
                 signature: lensItem.lensResource?.signature || "",
                 sha256: lensItem.lensResource?.checkSum || "",
-                last_updated: lensItem.lensResource?.lastUpdated || ""
+                last_updated: lensItem.lensResource?.lastUpdated || lensItem.lastUpdatedEpoch || ""
             });
 
-            if (result.lastUpdated) {
-                result.lastUpdated = SnapLensWebCrawler.normalizeTimestamp(result.lastUpdated);
+            if (result.last_updated) {
+                result.last_updated = SnapLensWebCrawler.normalizeTimestamp(result.last_updated);
             }
         }
-
-        Object.keys(result).forEach(key => {
-            if (typeof result[key] === 'string') {
-                result[key] = result[key].trim();
-            }
-        });
 
         return result;
     }
