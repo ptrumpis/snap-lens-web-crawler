@@ -8,9 +8,6 @@
 # 👻 Snap Lens Web Crawler
 JavaScript library to crawl and download Snap Lenses from *lens.snapchat.com* with ease.  
 
-## ⚠️ Requirements
-- cheerio
-
 ## 🚀 Usage
 ### npm
 ```shell
