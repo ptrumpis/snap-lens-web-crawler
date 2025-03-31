@@ -1,8 +1,16 @@
 class CrawlerFailure {
-    constructor(message, url, previous = undefined) {
+    constructor(message, url = undefined, previous = undefined) {
         this.message = message;
         this.url = url;
         this.previous = previous;
+    }
+}
+
+class CralwerAggregateFailure extends CrawlerFailure {
+    // Multiple failures from getLensByArchivedSnapshot() or Promise.any()
+    constructor(failures, message, url, previous) {
+        super(message, url, previous);
+        this.failures = failures;
     }
 }
 
@@ -52,6 +60,7 @@ class CrawlerNotFoundFailure extends CrawlerHTTPStatusFailure {
 
 export {
     CrawlerFailure,
+    CralwerAggregateFailure,
     CrawlerInvalidUrlFailure,
     CrawlerJsonFailure,
     CrawlerJsonParseFailure,
@@ -65,6 +74,7 @@ export {
 
 export default {
     CrawlerFailure,
+    CralwerAggregateFailure,
     CrawlerInvalidUrlFailure,
     CrawlerJsonFailure,
     CrawlerJsonParseFailure,
