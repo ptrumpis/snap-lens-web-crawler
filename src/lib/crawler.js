@@ -4,7 +4,7 @@ import path from 'path';
 import { createWriteStream } from 'fs';
 import { pipeline } from 'stream/promises';
 import HTTPStatusError from './error.js';
-import { CrawlerFailure, CrawlerInvalidUrlFailure, CrawlerJsonFailure, CrawlerJsonParseFailure, CrawlerJsonStructureFailure, CrawlerRequestErrorFailure, CrawlerRequestTimeoutFailure, CrawlerHTTPStatusFailure, CrawlerNotFoundFailure } from './failure.js';
+import { CrawlerFailure, CrawlerInvalidUrlFailure, CrawlerJsonFailure, CrawlerJsonParseFailure, CrawlerJsonStructureFailure, CrawlerRequestErrorFailure, CrawlerRequestTimeoutFailure, CrawlerHTTPStatusFailure, CrawlerNotFoundFailure, CralwerAggregateFailure } from './failure.js';
 
 class SnapLensWebCrawler {
     TOP_CATEGORIES = {
@@ -58,7 +58,7 @@ class SnapLensWebCrawler {
         this.#failedRequestDelayMs = Math.max(failedRequestDelayMs, this.#minRequestDelayMs);
         this.#maxRequestRetries = Math.max(maxRequestRetries, 0);
         this.#headers = headers || {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36'
         };
 
         this.setVerbose(verbose);
@@ -308,29 +308,30 @@ class SnapLensWebCrawler {
                     failures.push(snapshot);
                     continue;
                 } else if (!(snapshot instanceof ArchivedSnapshot)) {
+                    failures.push(new CrawlerFailure('Unexpected return value', targetUrl));
                     continue;
                 }
 
                 let snapshotLens = await this.#getSingleLens(snapshot.url, { hash });
-                if (snapshotLens) {
-                    snapshotLens = this.#fixArchiveUrlPrefixes(snapshotLens);
-
-                    lens = SnapLensWebCrawler.mergeLensItems(snapshotLens, lens);
-                    if (lens.lens_url) {
-                        lens.snapshot = snapshot;
-                        break;
-                    }
+                if (snapshotLens instanceof CrawlerFailure) {
+                    failures.push(snapshotLens);
+                    continue;
                 }
+
+                lens = SnapLensWebCrawler.mergeLensItems(this.#fixArchiveUrlPrefixes(snapshotLens), lens);
+                if (lens.lens_url) {
+                    lens.snapshot = snapshot;
+                    return lens;
+                }
+
+                failures.push(new CrawlerFailure(`Snapshot exists but has no lens URL`, targetUrl));
             }
-
-            // let caller know about failures
-            lens.archived_snapshot_failures = failures;
-
-            return lens;
         } catch (e) {
             this.#console.error(e);
-            return new CrawlerFailure(e.message, url);
+            return new CrawlerFailure(e.message);
         }
+
+        return new CralwerAggregateFailure(failures, `Failed to get snapshot for: ${hash}`);
     }
 
     async getLensesFromUrl(url, lensDefaults = {}) {
@@ -487,35 +488,38 @@ class SnapLensWebCrawler {
     async #queryArchivedSnapshot(url) {
         const apiUrl = `https://archive.org/wayback/available?timestamp=${this.#SNAPSHOT_TIMESTAMP}&url=${encodeURIComponent(url)}`;
 
-        const result = await this.#getJsonFromUrl(apiUrl, "archived_snapshots");
-        if (result instanceof CrawlerFailure) {
-            return result;
-        }
-
-        if (!result.closest?.url || !result.closest?.timestamp) {
-            // snapshot does not exist
-            return null;
-        }
-
-        const snapshotTime = parseInt(result.closest.timestamp) || 0;
-        if (snapshotTime < this.#SNAPSHOT_THRESHOLD_MIN || snapshotTime > this.#SNAPSHOT_THRESHOLD_MAX) {
-            // snapshot exists but does not match criteria
-            return null;
-        }
-
         try {
-            const snapshotUrl = new URL(result.closest.url);
-            return new ArchivedSnapshot(snapshotUrl.toString(), this.#archiveTimestampToDateString(snapshotTime));
+            const result = await this.#getJsonFromUrl(apiUrl, "archived_snapshots");
+            if (result instanceof CrawlerFailure) {
+                return result;
+            }
+
+            if (!result.closest?.url || !result.closest?.timestamp) {
+                return new CrawlerFailure(`Snapshot does not exist`, apiUrl);
+            }
+
+            const snapshotTime = parseInt(result.closest.timestamp) || 0;
+            if (snapshotTime < this.#SNAPSHOT_THRESHOLD_MIN || snapshotTime > this.#SNAPSHOT_THRESHOLD_MAX) {
+                return new CrawlerFailure(`Snapshot exists but does not match criteria`, apiUrl);
+            }
+
+            try {
+                const snapshotUrl = new URL(result.closest.url);
+                return new ArchivedSnapshot(snapshotUrl.toString(), this.#archiveTimestampToDateString(snapshotTime));
+            } catch (e) {
+                this.#console.error(`[Error] ${url} - Invalid snapshot URL: ${result.closest.url}`);
+                return new CrawlerFailure(e.message, apiUrl);
+            }
         } catch (e) {
-            this.#console.error(`[Error] Invalid Snapshot URL: ${url} - ${e.message}`);
-            return new CrawlerInvalidUrlFailure(e.message, url);
+            this.#console.error(e);
+            return new CrawlerFailure(e.message, apiUrl);
         }
     }
 
-    async #crawlJsonFromUrl(url, jsonPropertyPath, options = {}) {
+    async #crawlJsonFromUrl(url, jsonPropertyPath = null, options = {}) {
         const jsonObj = this.#getJsonCache(url);
         if (typeof jsonObj !== 'undefined') {
-            return this.#getProperty(jsonObj, jsonPropertyPath, url);
+            return (jsonPropertyPath) ? this.#getProperty(jsonObj, jsonPropertyPath, url) : jsonObj;
         }
 
         try {
@@ -526,7 +530,7 @@ class SnapLensWebCrawler {
 
             if (typeof body === 'string' && body.trim().length === 0) {
                 this.#console.error(`[Crawl Error] ${url} - Empty HTML body received`);
-                return new CrawlerFailure('Empty HTML body received', url);
+                return new CrawlerFailure(`Empty HTML body received`, url);
             }
 
             let $ = cheerio.load(body);
@@ -548,7 +552,7 @@ class SnapLensWebCrawler {
                     this.#setJsonCache(url, parsedJson);
                 }
 
-                return this.#getProperty(parsedJson, jsonPropertyPath, url);
+                return (jsonPropertyPath) ? this.#getProperty(parsedJson, jsonPropertyPath, url) : parsedJson;
             } catch (e) {
                 if (e.name === 'SyntaxError') {
                     this.#console.error(`[JSON Error] ${url} - ${e.message}`);
@@ -564,10 +568,10 @@ class SnapLensWebCrawler {
         }
     }
 
-    async #getJsonFromUrl(url, jsonPropertyPath, options = {}) {
+    async #getJsonFromUrl(url, jsonPropertyPath = null, options = {}) {
         const jsonObj = this.#getJsonCache(url);
         if (typeof jsonObj !== 'undefined') {
-            return this.#getProperty(jsonObj, jsonPropertyPath, url);
+            return (jsonPropertyPath) ? this.#getProperty(jsonObj, jsonPropertyPath, url) : jsonObj;
         }
 
         try {
@@ -584,7 +588,7 @@ class SnapLensWebCrawler {
                     this.#setJsonCache(url, parsedJson);
                 }
 
-                return this.#getProperty(parsedJson, jsonPropertyPath, url);
+                return (jsonPropertyPath) ? this.#getProperty(parsedJson, jsonPropertyPath, url) : parsedJson;
             } catch (e) {
                 if (e.name === 'SyntaxError') {
                     this.#console.error(`[JSON Error] ${url} - ${e.message}`);
