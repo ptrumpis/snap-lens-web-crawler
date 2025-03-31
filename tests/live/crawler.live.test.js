@@ -6,7 +6,7 @@ describe('SnapLensWebCrawler [Live Test]', () => {
     let crawler;
 
     beforeEach(() => {
-        crawler = new SnapLensWebCrawler({ connectionTimeoutMs: 6000, maxRequestRetries: 0, verbose: true });
+        crawler = new SnapLensWebCrawler({ connectionTimeoutMs: 6000, maxRequestRetries: 1, verbose: true });
     });
 
     afterEach(() => {
