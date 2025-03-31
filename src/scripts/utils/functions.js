@@ -179,7 +179,7 @@ async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloa
                         lensInfo = SnapLensWebCrawler.mergeLensItems(lensInfo, archivedLensInfo);
 
                         // mark the non-existence of archived snapshots (prevent unecessary re-crawl)
-                        if (!archivedLensInfo.lens_url && archivedLensInfo.archived_snapshot_failures.length === 0) {
+                        if (!archivedLensInfo.lens_url) {
                             lensInfo.has_archived_snapshots = false;
                         } else if (archivedLensInfo.snapshot) {
                             console.log(`[Found Snapshot] ${archivedLensInfo.uuid} - ${archivedLensInfo.snapshot.date}`);
@@ -190,9 +190,6 @@ async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloa
 
                         // do not store snapshot
                         delete lensInfo.snapshot;
-
-                        // do not store failures
-                        delete lensInfo.archived_snapshot_failures;
                     }
                 }
 
