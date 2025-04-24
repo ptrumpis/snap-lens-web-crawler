@@ -131,7 +131,7 @@ async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloa
 
                     existingLensInfo = JSON.parse(data);
                     if (existingLensInfo) {
-                        if (existingLensInfo.lens_url && lensInfo.lens_url && existingLensInfo.lens_url !== lensInfo.lens_url && existingLensInfo.is_mirrored !== true) {
+                        if (existingLensInfo.lens_url && lensInfo.lens_url && existingLensInfo.lens_url !== lensInfo.lens_url && (existingLensInfo.is_mirrored !== true || overwriteExistingData)) {
                             // keep latest information, overwrite existing data and reset download flags
                             console.info(`[URL Replace] Replacing URL for Lens: ${lensInfo.uuid}`);
                             lensInfo = SnapLensWebCrawler.mergeLensItems(lensInfo, existingLensInfo);
