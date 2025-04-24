@@ -1,6 +1,6 @@
 {
   "name": "@ptrumpis/snap-lens-web-crawler",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
@@ -51,6 +51,6 @@
   "devDependencies": {
     "csv-parser": "~3.2.0",
     "mocha": "~11.1.0",
-    "nock": "~14.0.1"
+    "nock": "~14.0.4"
   }
 }
