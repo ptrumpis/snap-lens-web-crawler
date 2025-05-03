@@ -58,7 +58,7 @@ class SnapLensWebCrawler {
         this.#failedRequestDelayMs = Math.max(failedRequestDelayMs, this.#minRequestDelayMs);
         this.#maxRequestRetries = Math.max(maxRequestRetries, 0);
         this.#headers = headers || {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36'
         };
 
         this.setVerbose(verbose);
@@ -426,24 +426,25 @@ class SnapLensWebCrawler {
     async #getTopLenses(url, maxLenses = 100, lensDefaults = {}) {
         const lenses = [];
         const currentUrl = new URL(url);
-        const shouldLimit = Number.isInteger(maxLenses) && maxLenses > 0;
+
+        maxLenses = (Number.isInteger(maxLenses) && maxLenses > 0) ? maxLenses : 1000;
 
         try {
-            while (!shouldLimit || lenses.length < maxLenses) {
+            while (lenses.length <= maxLenses) {
                 const pageProps = await this.#crawlJsonFromUrl(currentUrl.toString(), "props.pageProps", { retryNotFound: true });
                 if (!pageProps?.topLenses) {
                     break;
                 }
 
                 let newLenses = pageProps.topLenses;
-                if (shouldLimit && lenses.length < maxLenses) {
+                if (lenses.length < maxLenses) {
                     const remaining = maxLenses - lenses.length;
                     newLenses = newLenses.slice(0, Math.max(0, remaining));
                 }
 
                 newLenses.forEach(lens => lenses.push(SnapLensWebCrawler.formatLensItem(lens, lensDefaults)));
 
-                if (!pageProps.hasMore || !pageProps.nextCursorId) {
+                if (!pageProps.hasMore || !pageProps.nextCursorId || currentUrl.searchParams.get("cursor_id") === pageProps.nextCursorId) {
                     break;
                 }
 
