@@ -472,7 +472,7 @@ class SnapLensWebCrawler {
             if (typeof pageProps.encodedSearchResponse === "string") {
                 // new data structure introduced in summer 2024
                 const searchResult = JSON.parse(pageProps.encodedSearchResponse);
-                const lensSection = searchResult.sections.find(section => section.title === "Lenses");
+                const lensSection = searchResult.sections.find(section => (section.title === "Lenses" || section.sectionType === 6));
 
                 return (lensSection?.results || [])
                     .map(entry => entry?.result?.lens)
