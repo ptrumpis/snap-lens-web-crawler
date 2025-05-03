@@ -430,14 +430,14 @@ class SnapLensWebCrawler {
         maxLenses = (Number.isInteger(maxLenses) && maxLenses > 0) ? maxLenses : 1000;
 
         try {
-            while (lenses.length <= maxLenses) {
+            while (lenses.length < maxLenses) {
                 const pageProps = await this.#crawlJsonFromUrl(currentUrl.toString(), "props.pageProps", { retryNotFound: true });
-                if (!pageProps?.topLenses) {
+                if (!pageProps?.topLenses || !Array.isArray(pageProps.topLenses)) {
                     break;
                 }
 
                 let newLenses = pageProps.topLenses;
-                if (lenses.length < maxLenses) {
+                if ((lenses.length + newLenses.length) > maxLenses) {
                     const remaining = maxLenses - lenses.length;
                     newLenses = newLenses.slice(0, Math.max(0, remaining));
                 }
