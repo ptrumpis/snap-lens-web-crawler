@@ -50,7 +50,7 @@
   },
   "devDependencies": {
     "csv-parser": "~3.2.0",
-    "mocha": "~11.1.0",
+    "mocha": "~11.2.2",
     "nock": "~14.0.4"
   }
 }
