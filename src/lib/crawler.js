@@ -3,6 +3,8 @@ import fs from 'fs/promises';
 import path from 'path';
 import { createWriteStream } from 'fs';
 import { pipeline } from 'stream/promises';
+import { randomUUID } from 'node:crypto';
+import SpoofHeader from './header.js';
 import HTTPStatusError from './error.js';
 import { CrawlerFailure, CrawlerInvalidUrlFailure, CrawlerJsonFailure, CrawlerJsonParseFailure, CrawlerJsonStructureFailure, CrawlerRequestErrorFailure, CrawlerRequestTimeoutFailure, CrawlerHTTPStatusFailure, CrawlerNotFoundFailure, CralwerAggregateFailure } from './failure.js';
 
@@ -14,6 +16,14 @@ class SnapLensWebCrawler {
         music: '/category/music',
         live: '/category/web_live',
     };
+
+    TOP_LOCALES = [
+        "ar", "bn-BD", "bn-IN", "da-DK", "de-DE", "el-GR", "en-GB", "en-US", "es",
+        "es-AR", "es-ES", "es-MX", "fi-FI", "fil-PH", "fr-FR", "gu-IN", "hi-IN",
+        "id-ID", "it-IT", "ja-JP", "kn-IN", "ko-KR", "ml-IN", "mr-IN", "ms-MY",
+        "nb-NO", "nl-NL", "pa", "pl-PL", "pt-BR", "pt-PT", "ro-RO", "ru-RU", "sv-SE",
+        "ta-IN", "te-IN", "th-TH", "tr-TR", "ur-PK", "vi-VN", "zh-Hans", "zh-Hant"
+    ];
 
     #SCRIPT_SELECTOR = '#__NEXT_DATA__';
 
@@ -58,7 +68,7 @@ class SnapLensWebCrawler {
         this.#failedRequestDelayMs = Math.max(failedRequestDelayMs, this.#minRequestDelayMs);
         this.#maxRequestRetries = Math.max(maxRequestRetries, 0);
         this.#headers = headers || {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
         };
 
         this.setVerbose(verbose);
@@ -272,7 +282,7 @@ class SnapLensWebCrawler {
     }
 
     async getTopLensesByCategory(category = 'default', maxLenses = 100) {
-        if (!this.TOP_CATEGORIES[category]) {
+        if (typeof this.TOP_CATEGORIES[category] === 'undefined') {
             this.#console.error(`Unknown top lens category: ${category} \nValid top lens categories are:`, Object.getOwnPropertyNames(this.TOP_CATEGORIES));
             return [];
         }
@@ -423,38 +433,86 @@ class SnapLensWebCrawler {
         }
     }
 
-    async #getTopLenses(url, maxLenses = 100, lensDefaults = {}) {
-        const lenses = [];
+    async #getTopLenses(url, maxLenses, lensDefaults = {}) {
+        const lenses = new Map();
         const currentUrl = new URL(url);
 
-        maxLenses = (Number.isInteger(maxLenses) && maxLenses > 0) ? maxLenses : 1000;
+        const cursors = new Set();
+        const cursorLimit = 50;
+
+        // enforce maximum of 10000 lenses
+        maxLenses = (Number.isInteger(maxLenses) && maxLenses > 0) ? maxLenses : 10000;
 
         try {
-            while (lenses.length < maxLenses) {
-                const pageProps = await this.#crawlJsonFromUrl(currentUrl.toString(), "props.pageProps", { retryNotFound: true });
-                if (!pageProps?.topLenses || !Array.isArray(pageProps.topLenses)) {
+            const spoofHeader = new SpoofHeader();
+
+            const locales = this.#shuffle(this.TOP_LOCALES);
+            for (const locale of locales) {
+                if (currentUrl.searchParams.has('locale')) {
+                    currentUrl.searchParams.set('locale', locale);
+                }
+
+                if (currentUrl.searchParams.has('sender_id')) {
+                    currentUrl.searchParams.set('sender_id', randomUUID());
+                }
+
+                let hasReachedEnd = false;
+                for (let i = 0; i < this.#maxRequestRetries && lenses.size < maxLenses && !hasReachedEnd; i++) {
+                    cursors.clear();
+
+                    const headers = spoofHeader.getHeadersFor(currentUrl.toString(), [locale], false);
+
+                    while (lenses.size < maxLenses) {
+                        const pageProps = await this.#crawlJsonFromUrl(currentUrl.toString(), "props.pageProps", { retryNotFound: true, headers: headers });
+                        if (!pageProps?.topLenses || !Array.isArray(pageProps.topLenses) || !pageProps.topLenses.length) {
+                            this.#sleep(this.#failedRequestDelayMs);
+                            break;
+                        }
+
+                        let newLenses = pageProps.topLenses;
+                        if ((lenses.size + newLenses.length) > maxLenses) {
+                            const remaining = maxLenses - lenses.size;
+                            newLenses = newLenses.slice(0, Math.max(0, remaining));
+                        }
+
+                        newLenses.forEach(newLens => {
+                            const lens = SnapLensWebCrawler.formatLensItem(newLens, lensDefaults);
+                            if (!lenses.has(lens.uuid)) {
+                                lenses.set(lens.uuid, lens);
+                            }
+                        });
+
+                        if (!pageProps.hasMore || !pageProps.nextCursorId || cursors.size >= cursorLimit) {
+                            currentUrl.searchParams.delete('cursor_id');
+
+                            hasReachedEnd = true;
+                            break;
+                        }
+
+                        if (cursors.has(pageProps.nextCursorId)) {
+                            this.#jsonCache.delete(currentUrl.toString());
+
+                            currentUrl.searchParams.set('locale', locale);
+                            currentUrl.searchParams.set('sender_id', randomUUID());
+
+                            this.#sleep(this.#failedRequestDelayMs);
+                            break;
+                        }
+
+                        currentUrl.searchParams.set('cursor_id', pageProps.nextCursorId);
+                        cursors.add(pageProps.nextCursorId);
+                    }
+                }
+
+                if (lenses.size >= maxLenses) {
                     break;
                 }
-
-                let newLenses = pageProps.topLenses;
-                if ((lenses.length + newLenses.length) > maxLenses) {
-                    const remaining = maxLenses - lenses.length;
-                    newLenses = newLenses.slice(0, Math.max(0, remaining));
-                }
-
-                newLenses.forEach(lens => lenses.push(SnapLensWebCrawler.formatLensItem(lens, lensDefaults)));
-
-                if (!pageProps.hasMore || !pageProps.nextCursorId || currentUrl.searchParams.get("cursor_id") === pageProps.nextCursorId) {
-                    break;
-                }
-
-                currentUrl.searchParams.set("cursor_id", pageProps.nextCursorId);
             }
         } catch (e) {
             this.#console.error(e);
         }
 
-        return lenses;
+        return Array.from(lenses.values());
     }
 
     #handleSearchResults(pageProps, lensDefaults = {}) {
@@ -647,7 +705,7 @@ class SnapLensWebCrawler {
         }
     }
 
-    async #request(url, method = 'GET', { retryNotFound = false, retryFailed = true, retryTimeout = true, retryError = true } = {}) {
+    async #request(url, method = 'GET', { retryNotFound = false, retryFailed = true, retryTimeout = true, retryError = true, headers = null } = {}) {
         const maxAttempts = this.#maxRequestRetries + 1;
         let attempt = 1;
         let hostname = null;
@@ -658,6 +716,8 @@ class SnapLensWebCrawler {
             this.#console.error(`[Error] Invalid URL: ${url} - ${e.message}`);
             return new CrawlerInvalidUrlFailure(e.message, url);
         }
+
+        const requestHeaders = { ...this.#headers, ...(headers || {}) };
 
         let crawlerFailure = undefined;
         while (attempt <= maxAttempts) {
@@ -671,7 +731,7 @@ class SnapLensWebCrawler {
                     this.#lastRequestTimestamps.set(hostname, Date.now());
                 }
 
-                const response = await fetch(url, { method: method, signal: controller.signal, headers: this.#headers });
+                const response = await fetch(url, { method: method, signal: controller.signal, headers: requestHeaders });
                 clearTimeout(timeout);
 
                 if (response?.ok) {
@@ -827,6 +887,15 @@ class SnapLensWebCrawler {
         return new Promise((resolve) => {
             setTimeout(resolve, ms);
         });
+    }
+
+    #shuffle(arr) {
+        const a = [...arr];
+        for (let i = a.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [a[i], a[j]] = [a[j], a[i]];
+        }
+        return a;
     }
 }
 
