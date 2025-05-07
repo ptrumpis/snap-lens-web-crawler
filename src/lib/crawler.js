@@ -464,8 +464,13 @@ class SnapLensWebCrawler {
 
                     while (lenses.size < maxLenses) {
                         const pageProps = await this.#crawlJsonFromUrl(currentUrl.toString(), "props.pageProps", { retryNotFound: true, headers: headers });
+                        if (pageProps instanceof CrawlerFailure) {
+                            currentUrl.searchParams.delete('cursor_id');
+                            hasReachedEnd = true;
+                            break;
+                        }
+
                         if (!pageProps?.topLenses || !Array.isArray(pageProps.topLenses) || !pageProps.topLenses.length) {
-                            this.#sleep(this.#failedRequestDelayMs);
                             break;
                         }
 
@@ -484,7 +489,6 @@ class SnapLensWebCrawler {
 
                         if (!pageProps.hasMore || !pageProps.nextCursorId || cursors.size >= cursorLimit) {
                             currentUrl.searchParams.delete('cursor_id');
-
                             hasReachedEnd = true;
                             break;
                         }
