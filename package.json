@@ -34,7 +34,7 @@
     "import-csv": "node --expose-gc src/scripts/importCsv.js",
     "import-url": "node --expose-gc src/scripts/importUrl.js",
     "live-test": "mocha -t 20000 tests/live/*.test.js",
-    "test": "mocha tests/*.test.js"
+    "test": "mocha -t 20000 tests/*.test.js"
   },
   "author": "Patrick Trumpis <ptrumpis@pm.me>",
   "repository": {
@@ -46,11 +46,12 @@
   },
   "license": "GPL-3.0",
   "dependencies": {
-    "cheerio": "1.0.0"
+    "cheerio": "1.0.0",
+    "fingerprint-generator": "~2.1.66"
   },
   "devDependencies": {
     "csv-parser": "~3.2.0",
-    "mocha": "~11.1.0",
+    "mocha": "~11.2.2",
     "nock": "~14.0.4"
   }
 }
