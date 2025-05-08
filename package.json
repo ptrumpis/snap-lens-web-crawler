@@ -1,6 +1,6 @@
 {
   "name": "@ptrumpis/snap-lens-web-crawler",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
@@ -30,7 +30,7 @@
     "node": ">=18.17"
   },
   "scripts": {
-    "crawl": "node --expose-gc src/scripts/crawl.js",
+    "crawl": "node src/scripts/crawl.js",
     "import-csv": "node --expose-gc src/scripts/importCsv.js",
     "import-url": "node --expose-gc src/scripts/importUrl.js",
     "live-test": "mocha -t 20000 tests/live/*.test.js",
