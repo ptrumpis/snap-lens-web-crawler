@@ -287,6 +287,11 @@ class SnapLensWebCrawler {
             return [];
         }
 
+        if (category === 'live') {
+            // live category has only 11 filters
+            maxLenses = 11;
+        }
+
         return await this.#getTopLenses(`https://www.snapchat.com/lens${this.TOP_CATEGORIES[category]}`, maxLenses);
     }
 
@@ -452,63 +457,56 @@ class SnapLensWebCrawler {
                     currentUrl.searchParams.set('locale', locale);
                 }
 
-                if (currentUrl.searchParams.has('sender_id')) {
-                    currentUrl.searchParams.set('sender_id', randomUUID());
+                if (currentUrl.searchParams.has('sender_web_id')) {
+                    currentUrl.searchParams.set('sender_web_id', randomUUID());
                 }
 
-                let hasReachedEnd = false;
-                for (let i = 0; i < this.#maxRequestRetries && lenses.size < maxLenses && !hasReachedEnd; i++) {
-                    cursors.clear();
+                cursors.clear();
 
-                    const headers = spoofHeader.getHeadersFor(currentUrl.toString(), [locale], false);
+                const headers = spoofHeader.getHeadersFor(currentUrl.toString(), [locale], false);
 
-                    while (lenses.size < maxLenses) {
-                        const pageProps = await this.#crawlJsonFromUrl(currentUrl.toString(), "props.pageProps", { retryNotFound: true, headers: headers });
-                        if (pageProps instanceof CrawlerFailure) {
-                            currentUrl.searchParams.delete('cursor_id');
-                            hasReachedEnd = true;
-                            break;
-                        }
-
-                        if (!pageProps?.topLenses || !Array.isArray(pageProps.topLenses) || !pageProps.topLenses.length) {
-                            break;
-                        }
-
-                        let newLenses = pageProps.topLenses;
-                        if ((lenses.size + newLenses.length) > maxLenses) {
-                            const remaining = maxLenses - lenses.size;
-                            newLenses = newLenses.slice(0, Math.max(0, remaining));
-                        }
-
-                        newLenses.forEach(newLens => {
-                            const lens = SnapLensWebCrawler.formatLensItem(newLens, lensDefaults);
-                            if (!lenses.has(lens.uuid)) {
-                                lenses.set(lens.uuid, lens);
-                            }
-                        });
-
-                        if (!pageProps.hasMore || !pageProps.nextCursorId || cursors.size >= cursorLimit) {
-                            currentUrl.searchParams.delete('cursor_id');
-                            hasReachedEnd = true;
-                            break;
-                        }
-
-                        if (cursors.has(pageProps.nextCursorId)) {
-                            this.#jsonCache.delete(currentUrl.toString());
-
-                            currentUrl.searchParams.set('locale', locale);
-                            currentUrl.searchParams.set('sender_id', randomUUID());
-
-                            this.#sleep(this.#failedRequestDelayMs);
-                            break;
-                        }
-
-                        currentUrl.searchParams.set('cursor_id', pageProps.nextCursorId);
-                        cursors.add(pageProps.nextCursorId);
+                while (lenses.size < maxLenses) {
+                    const pageProps = await this.#crawlJsonFromUrl(currentUrl.toString(), "props.pageProps", { retryNotFound: true, headers: headers });
+                    if (pageProps instanceof CrawlerNotFoundFailure) {
+                        currentUrl.searchParams.delete('cursor_id');
+                        break;
+                    } else if (!pageProps?.topLenses || !Array.isArray(pageProps.topLenses) || !pageProps.topLenses.length) {
+                        break;
                     }
+
+                    let newLenses = pageProps.topLenses;
+                    if ((lenses.size + newLenses.length) > maxLenses) {
+                        const remaining = maxLenses - lenses.size;
+                        newLenses = newLenses.slice(0, Math.max(0, remaining));
+                    }
+
+                    newLenses.forEach(newLens => {
+                        const lens = SnapLensWebCrawler.formatLensItem(newLens, lensDefaults);
+                        if (!lenses.has(lens.uuid)) {
+                            lenses.set(lens.uuid, lens);
+                        }
+                    });
+
+                    if (!pageProps.hasMore || !pageProps.nextCursorId || cursors.size >= cursorLimit) {
+                        currentUrl.searchParams.delete('cursor_id');
+                        break;
+                    }
+
+                    if (cursors.has(pageProps.nextCursorId)) {
+                        this.#jsonCache.delete(currentUrl.toString());
+
+                        currentUrl.searchParams.set('locale', locale);
+                        currentUrl.searchParams.set('sender_web_id', randomUUID());
+
+                        this.#sleep(this.#failedRequestDelayMs);
+                        break;
+                    }
+
+                    currentUrl.searchParams.set('cursor_id', pageProps.nextCursorId);
+                    cursors.add(pageProps.nextCursorId);
                 }
 
-                if (lenses.size >= maxLenses) {
+                if (lenses.size >= maxLenses || lenses.size === 0) {
                     break;
                 }
             }
