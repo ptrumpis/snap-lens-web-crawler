@@ -11,6 +11,7 @@ import { CrawlerFailure, CrawlerInvalidUrlFailure, CrawlerJsonFailure, CrawlerJs
 class SnapLensWebCrawler {
     TOP_CATEGORIES = {
         default: '/',
+        trending: '/category/trending',
         face: '/category/face',
         world: '/category/world',
         music: '/category/music',
