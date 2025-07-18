@@ -46,12 +46,12 @@
   },
   "license": "GPL-3.0",
   "dependencies": {
-    "cheerio": "1.0.0",
-    "fingerprint-generator": "~2.1.66"
+    "cheerio": "1.1.0",
+    "fingerprint-generator": "~2.1.69"
   },
   "devDependencies": {
     "csv-parser": "~3.2.0",
-    "mocha": "~11.5.0",
+    "mocha": "~11.7.1",
     "nock": "~14.0.5"
   }
 }
