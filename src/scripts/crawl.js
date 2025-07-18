@@ -4,6 +4,7 @@ import * as Utils from "./utils/functions.js";
 const args = new Set(process.argv.slice(2));
 
 const options = {
+    queryArchive: args.has('--query-archive'),
     retryBrokenDownloads: args.has('--retry-broken-downloads'),
     overwriteExistingBolts: args.has('--overwrite-existing-bolts') || args.has('--overwrite-existing'),
     overwriteExistingData: args.has('--overwrite-existing-data') || args.has('--overwrite-existing'),

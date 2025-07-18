@@ -91,7 +91,7 @@ function isLensInfoMissing(lensInfo) {
     return (isLensIdMissing || isLensNameMissing || isUserNameMissing || isCreatorTagsMissing);
 }
 
-async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloads = false, overwriteExistingBolts = false, overwriteExistingData = false, saveIncompleteLensInfo = false, crawler = null, resolvedLensCache = null } = {}) {
+async function crawlLenses(lenses, { queryArchive = true, queryRelayServer = true, retryBrokenDownloads = false, overwriteExistingBolts = false, overwriteExistingData = false, saveIncompleteLensInfo = false, crawler = null, resolvedLensCache = null } = {}) {
     let destroyCrawler = false;
     let clearResolvedCache = false;
 
@@ -170,7 +170,7 @@ async function crawlLenses(lenses, { queryRelayServer = true, retryBrokenDownloa
                 }
 
                 // try to resolve missing URL's from archived snapshots
-                const queryArchiveCondition = (!lensInfo.lens_url && lensInfo.has_archived_snapshots !== false);
+                const queryArchiveCondition = (queryArchive && !lensInfo.lens_url && lensInfo.has_archived_snapshots !== false);
                 if (queryArchiveCondition) {
                     console.log(`[Wayback Machine] Trying to find lens: ${lensInfo.uuid}`);
 
